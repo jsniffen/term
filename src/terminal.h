@@ -151,9 +151,7 @@ void swap_buffers(struct terminal *t)
 	bool *db = t->diff_buffer;
 
 	for (int os = 0; os < t->width*t->height; ++os) {
-		if (db[os]) {
-			fb[os] = bb[os];
-		}
+		if (db[os]) fb[os] = bb[os];
 	}
 }
 
@@ -163,16 +161,12 @@ bool render_terminal(struct terminal *t)
 	struct cell *fb = t->front_buffer;
 	bool *db = t->diff_buffer;
 
-	for (int y = 0; y < t->height; ++y) {
-		for (int x = 0; x < t->height; ++x) {
-			if (*db++) {
-				int offset = t->width*y + x;
-
-				struct cell c = fb[offset];
-				wb += sprintf(wb, CSI "48;2;%d;%d;%dm", c.bg.r, c.bg.b, c.bg.g);
-				wb += sprintf(wb, CSI "38;2;%d;%d;%dm", c.fg.r, c.fg.b, c.fg.g);
-				*wb++ = c.c;
-			}
+	for (int os = 0; os < t->width*t->height; ++os) {
+		if (db[os]) {
+			struct cell c = fb[os];
+			wb += sprintf(wb, CSI "48;2;%d;%d;%dm", c.bg.r, c.bg.b, c.bg.g);
+			wb += sprintf(wb, CSI "38;2;%d;%d;%dm", c.fg.r, c.fg.b, c.fg.g);
+			*wb++ = c.c;
 		}
 	}
 
