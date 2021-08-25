@@ -10,6 +10,7 @@ int main(void)
 	create_terminal(&t);
 
 	clear_terminal(&t);
+
 	swap_buffers(&t);
 	render_terminal(&t);
 

@@ -23,8 +23,8 @@
 
 struct color {
 	uint8_t r;
-	uint8_t b;
 	uint8_t g;
+	uint8_t b;
 };
 
 struct cell {
@@ -164,8 +164,8 @@ bool render_terminal(struct terminal *t)
 	for (int os = 0; os < t->width*t->height; ++os) {
 		if (db[os]) {
 			struct cell c = fb[os];
-			wb += sprintf(wb, CSI "48;2;%d;%d;%dm", c.bg.r, c.bg.b, c.bg.g);
-			wb += sprintf(wb, CSI "38;2;%d;%d;%dm", c.fg.r, c.fg.b, c.fg.g);
+			wb += sprintf(wb, CSI "48;2;%d;%d;%dm", c.bg.r, c.bg.g, c.bg.b);
+			wb += sprintf(wb, CSI "38;2;%d;%d;%dm", c.fg.r, c.fg.g, c.fg.b);
 			*wb++ = c.c;
 		}
 	}
