@@ -1,14 +1,23 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <fcntl.h>
+
+#ifdef __linux__
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 #include <signal.h>
+
+#elif _WIN32
+
+#include <windows.h>
+
+#endif
 
 #define CSI "\x1b["
 
@@ -25,6 +34,10 @@ struct cell {
 };
 
 struct terminal {
+#ifdef _WIN32
+	HANDLE console;
+#endif
+
 	uint32_t fd;
 	uint32_t width;
 	uint32_t height;
@@ -35,6 +48,43 @@ struct terminal {
 	struct cell *back_buffer;
 	bool *diff_buffer;
 };
+
+bool create_terminal(struct terminal *t);
+bool write_terminal(struct terminal *t);
+
+#ifdef _WIN32
+bool write_terminal(struct terminal *t, int len)
+{
+	DWORD w;
+	return WriteFile(t->console, t->write_buffer, len, &w, 0);
+}
+
+bool create_terminal(struct terminal *t)
+{
+	t->console = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	DWORD console_mode;
+	GetConsoleMode(t->console, &console_mode);
+	SetConsoleMode(t->console, console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+
+	CONSOLE_SCREEN_BUFFER_INFO info;
+	GetConsoleScreenBufferInfo(t->console, &info);
+
+	t->width = info.srWindow.Right - info.srWindow.Left + 1;
+	t->height = info.srWindow.Bottom - info.srWindow.Top + 1;
+
+	t->write_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
+	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
+	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
+	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
+}
+#endif
+
+#ifdef __linux__
+bool write_terminal(struct terminal *t, int len)
+{
+	return write(t->fd, t->write_buffer, wb - t->write_buffer) != -1;
+}
 
 bool create_terminal(struct terminal *t)
 {
@@ -66,6 +116,7 @@ bool create_terminal(struct terminal *t)
 
 	return true;
 }
+#endif
 
 bool set_cell(struct terminal *t, int x, int y, struct cell c)
 {
@@ -125,7 +176,6 @@ bool render_terminal(struct terminal *t)
 		}
 	}
 
-	if (write(t->fd, t->write_buffer, wb - t->write_buffer) == -1) return false;
-	return true;
+	return write_terminal(t, wb - t->write_buffer);
 }
 
