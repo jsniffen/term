@@ -50,7 +50,7 @@ struct terminal {
 };
 
 bool create_terminal(struct terminal *t);
-bool write_terminal(struct terminal *t);
+bool write_terminal(struct terminal *t, int len);
 
 #ifdef _WIN32
 bool write_terminal(struct terminal *t, int len)
@@ -83,7 +83,7 @@ bool create_terminal(struct terminal *t)
 #ifdef __linux__
 bool write_terminal(struct terminal *t, int len)
 {
-	return write(t->fd, t->write_buffer, wb - t->write_buffer) != -1;
+	return write(t->fd, t->write_buffer, len) != -1;
 }
 
 bool create_terminal(struct terminal *t)
