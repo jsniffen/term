@@ -15,6 +15,8 @@
 
 #elif _WIN32
 
+#include <stdio.h>
+
 #include <windows.h>
 
 #endif
@@ -50,13 +52,13 @@ struct terminal {
 };
 
 bool create_terminal(struct terminal *t);
-bool write_terminal(struct terminal *t, int len);
+bool write_terminal(struct terminal *t, char *buffer, int len);
 
 #ifdef _WIN32
-bool write_terminal(struct terminal *t, int len)
+bool write_terminal(struct terminal *t, char *buffer, int len)
 {
 	DWORD w;
-	return WriteFile(t->console, t->write_buffer, len, &w, 0);
+	return WriteFile(t->console, buffer, len, &w, 0);
 }
 
 bool create_terminal(struct terminal *t)
@@ -77,13 +79,15 @@ bool create_terminal(struct terminal *t)
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
+
+	return true;
 }
 #endif
 
 #ifdef __linux__
-bool write_terminal(struct terminal *t, int len)
+bool write_terminal(struct terminal *t, char *buffer, int len)
 {
-	return write(t->fd, t->write_buffer, len) != -1;
+	return write(t->fd, buffer, len) != -1;
 }
 
 bool create_terminal(struct terminal *t)
@@ -117,6 +121,11 @@ bool create_terminal(struct terminal *t)
 	return true;
 }
 #endif
+
+bool flush_terminal(struct terminal *t, int len)
+{
+	return write_terminal(t, t->write_buffer, len);
+}
 
 bool set_cell(struct terminal *t, int x, int y, struct cell c)
 {
@@ -170,6 +179,24 @@ bool render_terminal(struct terminal *t)
 		}
 	}
 
-	return write_terminal(t, wb - t->write_buffer);
+	return flush_terminal(t, wb - t->write_buffer);
 }
+
+bool set_cursor_position_terminal(struct terminal *t, int x, int y)
+{
+	char b[32];
+	sprintf(b, CSI "%d;%dH", y, x);
+	return write_terminal(t, b, strlen(b));
+}
+
+bool hide_cursor_terminal(struct terminal *t)
+{
+	return write_terminal(t, CSI "?25l", 6);
+}
+
+bool show_cursor_terminal(struct terminal *t)
+{
+	return write_terminal(t, CSI "?25h", 6);
+}
+
 
