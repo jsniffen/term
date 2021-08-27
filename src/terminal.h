@@ -23,6 +23,22 @@
 
 #define CSI "\x1b["
 
+enum {
+	KeyboardEvent,
+};
+
+struct keyboard_event {
+	uint32_t type;
+
+	char key;
+};
+
+union event {
+	uint32_t type;
+
+	struct keyboard_event keyboard;
+};
+
 struct color {
 	uint8_t r;
 	uint8_t g;
@@ -197,6 +213,13 @@ bool hide_cursor_terminal(struct terminal *t)
 bool show_cursor_terminal(struct terminal *t)
 {
 	return write_terminal(t, CSI "?25h", 6);
+}
+
+bool poll_event_terminal(union event *e)
+{
+	e->type = KeyboardEvent;
+	e->keyboard.key = 'q';
+	return true;
 }
 
 

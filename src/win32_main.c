@@ -1,7 +1,12 @@
 #include <windows.h>
 #include <synchapi.h>
 
+#include <stdint.h>
+#include <stdbool.h>
+
 #include "terminal.h"
+
+static bool running = true;
 
 int main(void)
 {
@@ -15,9 +20,18 @@ int main(void)
 	swap_buffers(&t);
 	render_terminal(&t);
 
-	for (int i = 1; i < 255; ++i) {
-		set_cursor_terminal(&t, i, i);
-		write_terminal(&t, "J", 1);
+
+	union event e;
+	while (running) {
+		while (poll_event_terminal(&e)) {
+			if (e.type == KeyboardEvent) {
+				if (e.keyboard.key == 'q') {
+					running = false;
+					break;
+				}
+			}
+		}
+
 		Sleep(500);
 	}
 
