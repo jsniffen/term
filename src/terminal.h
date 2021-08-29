@@ -52,11 +52,13 @@ struct cell {
 };
 
 struct terminal {
-#ifdef _WIN32
+#ifdef __linux__
+	struct termios original_termios;
+	uint32_t fd;
+#elif _WIN32
 	HANDLE console;
 #endif
 
-	uint32_t fd;
 	uint32_t width;
 	uint32_t height;
 
@@ -68,6 +70,7 @@ struct terminal {
 };
 
 bool create_terminal(struct terminal *t);
+bool close_terminal(struct terminal *t);
 bool write_terminal(struct terminal *t, char *buffer, int len);
 
 #ifdef _WIN32
@@ -118,7 +121,8 @@ bool create_terminal(struct terminal *t)
 	t->height = ws.ws_row;
 
 	struct termios tios = {};
-	tcgetattr(t->fd, &tios);
+	tcgetattr(t->fd, &t->original_termios);
+	memcpy(&tios, &t->original_termios, sizeof(struct termios));
 
 	tios.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
 	tios.c_oflag &= ~OPOST;
@@ -135,6 +139,11 @@ bool create_terminal(struct terminal *t)
 	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
 
 	return true;
+}
+
+bool close_terminal(struct terminal *t)
+{
+	return tcsetattr(t->fd, TCSAFLUSH, &t->original_termios) == 0;
 }
 #endif
 
@@ -196,6 +205,11 @@ bool render_terminal(struct terminal *t)
 	}
 
 	return flush_terminal(t, wb - t->write_buffer);
+}
+
+bool reset_terminal(struct terminal *t)
+{
+	return write_terminal(t, CSI "0m", 4);
 }
 
 bool set_cursor_position_terminal(struct terminal *t, int x, int y)
