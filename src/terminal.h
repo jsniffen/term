@@ -51,12 +51,37 @@ struct cell {
 	char c;
 };
 
+struct queue {
+	union event events[32];
+	int rear_index;
+};
+
+void init_queue(struct queue *q)
+{
+	q->rear_index = 0;
+}
+
+bool enqueue(struct queue *q, union event e) {
+	if (q->rear_index + 1 >= 32) return false;
+	q->events[q->rear_index++] = e;
+	return true;
+}
+
+bool dequeue(struct queue *q, union event *e) {
+	if (q->rear_index <= 0) return false;
+	*e = q->events[0];
+	for (int i = 1; i < q->rear_index; ++i) q->events[i - 1] = q->events[i];
+	return true;
+}
+
+
 struct terminal {
 #ifdef __linux__
 	struct termios original_termios;
 	uint32_t fd;
 #elif _WIN32
-	HANDLE console;
+	HANDLE console_stdin;
+	HANDLE console_stdout;
 #endif
 
 	uint32_t width;
@@ -67,29 +92,42 @@ struct terminal {
 	struct cell *front_buffer;
 	struct cell *back_buffer;
 	bool *diff_buffer;
+
+	struct queue events;
 };
 
 bool create_terminal(struct terminal *t);
 bool close_terminal(struct terminal *t);
 bool write_terminal(struct terminal *t, char *buffer, int len);
+DWORD read_terminal(struct terminal *t, char *buffer, int len);
 
 #ifdef _WIN32
+DWORD read_terminal(struct terminal *t, char *buffer, int len)
+{
+	DWORD r;
+	return ReadFile(t->console_stdin, buffer, len, &r, 0);
+}
+
 bool write_terminal(struct terminal *t, char *buffer, int len)
 {
 	DWORD w;
-	return WriteFile(t->console, buffer, len, &w, 0);
+	return WriteFile(t->console_stdout, buffer, len, &w, 0);
 }
 
 bool create_terminal(struct terminal *t)
 {
-	t->console = GetStdHandle(STD_OUTPUT_HANDLE);
+	t->console_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
+	t->console_stdin = GetStdHandle(STD_INPUT_HANDLE);
 
 	DWORD console_mode;
-	GetConsoleMode(t->console, &console_mode);
-	SetConsoleMode(t->console, console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+	GetConsoleMode(t->console_stdout, &console_mode);
+	console_mode = console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	SetConsoleMode(t->console_stdout, console_mode);
+
+	SetConsoleMode(t->console_stdin, ENABLE_VIRTUAL_TERMINAL_INPUT);
 
 	CONSOLE_SCREEN_BUFFER_INFO info;
-	GetConsoleScreenBufferInfo(t->console, &info);
+	GetConsoleScreenBufferInfo(t->console_stdout, &info);
 
 	t->width = info.srWindow.Right - info.srWindow.Left + 1;
 	t->height = info.srWindow.Bottom - info.srWindow.Top + 1;
@@ -98,6 +136,8 @@ bool create_terminal(struct terminal *t)
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
+
+	init_queue(&t->events);
 
 	return true;
 }
@@ -137,6 +177,8 @@ bool create_terminal(struct terminal *t)
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
+
+	init_queue(&t->events);
 
 	return true;
 }
@@ -229,11 +271,15 @@ bool show_cursor_terminal(struct terminal *t)
 	return write_terminal(t, CSI "?25h", 6);
 }
 
-bool poll_event_terminal(union event *e)
+bool poll_event_terminal(struct terminal *t, union event *e)
 {
-	e->type = KeyboardEvent;
-	e->keyboard.key = 'q';
-	return true;
+	return dequeue(&t->events, e);
 }
 
+bool parse_event_terminal(struct terminal *t)
+{
+	char buffer[32];
+	if (!read_terminal(t, buffer, 32)) return false;
 
+	// parse the terminal events here...
+}
