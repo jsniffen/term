@@ -1,7 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-
 #ifdef __linux__
 
 #include <stdio.h>
@@ -21,10 +20,13 @@
 
 #endif
 
+
 #define CSI "\x1b["
 
 enum {
 	KeyboardEvent,
+	MouseEvent,
+	WindowEvent,
 };
 
 struct keyboard_event {
@@ -51,29 +53,8 @@ struct cell {
 	char c;
 };
 
-struct queue {
-	union event events[32];
-	int rear_index;
-};
-
-void init_queue(struct queue *q)
-{
-	q->rear_index = 0;
-}
-
-bool enqueue(struct queue *q, union event e) {
-	if (q->rear_index + 1 >= 32) return false;
-	q->events[q->rear_index++] = e;
-	return true;
-}
-
-bool dequeue(struct queue *q, union event *e) {
-	if (q->rear_index <= 0) return false;
-	*e = q->events[0];
-	for (int i = 1; i < q->rear_index; ++i) q->events[i - 1] = q->events[i];
-	return true;
-}
-
+static int event_count;
+static union event event_queue[256];
 
 struct terminal {
 #ifdef __linux__
@@ -92,16 +73,32 @@ struct terminal {
 	struct cell *front_buffer;
 	struct cell *back_buffer;
 	bool *diff_buffer;
-
-	struct queue events;
 };
 
 bool create_terminal(struct terminal *t);
 bool close_terminal(struct terminal *t);
 bool write_terminal(struct terminal *t, char *buffer, int len);
 DWORD read_terminal(struct terminal *t, char *buffer, int len);
+void parse_terminal_input(struct terminal *t, char *buffer, int len);
 
 #ifdef _WIN32
+HANDLE mutex;
+
+DWORD handle_stdin(struct terminal *t)
+{
+	DWORD read;
+	char buffer[32];
+
+	HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+
+	while (true) {
+		ReadFile(in, buffer, 32, &read, 0);
+		parse_terminal_input(t, buffer, read);
+	}
+
+	return 0;
+}
+
 DWORD read_terminal(struct terminal *t, char *buffer, int len)
 {
 	DWORD r;
@@ -116,6 +113,8 @@ bool write_terminal(struct terminal *t, char *buffer, int len)
 
 bool create_terminal(struct terminal *t)
 {
+	mutex = CreateMutex(0, 0, 0);
+
 	t->console_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 	t->console_stdin = GetStdHandle(STD_INPUT_HANDLE);
 
@@ -137,7 +136,8 @@ bool create_terminal(struct terminal *t)
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
 
-	init_queue(&t->events);
+	DWORD thread_id;
+	CreateThread(0, 0, handle_stdin, t, 0, &thread_id);
 
 	return true;
 }
@@ -177,8 +177,6 @@ bool create_terminal(struct terminal *t)
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
-
-	init_queue(&t->events);
 
 	return true;
 }
@@ -273,13 +271,39 @@ bool show_cursor_terminal(struct terminal *t)
 
 bool poll_event_terminal(struct terminal *t, union event *e)
 {
-	return dequeue(&t->events, e);
+	if (event_count <= 0) return false;
+
+	// int count = (int)InterlockedDecrement((LONG *)&event_count);
+	// *e = event_queue[count];
+
+	// WaitForSingleObject(mutex, INFINITE);
+	*e = event_queue[--event_count];
+	// ReleaseMutex(mutex);
+
+	return true;
 }
 
-bool parse_event_terminal(struct terminal *t)
+// If the buffer contains valid events, parse them and 
+// add them into the event queue.
+void parse_terminal_input(struct terminal *t, char *buffer, int len)
 {
-	char buffer[32];
-	if (!read_terminal(t, buffer, 32)) return false;
+	if (len <= 0) return;
 
-	// parse the terminal events here...
+	if (len == 1) {
+		union event e;
+		e.type = KeyboardEvent;
+		e.keyboard.key = buffer[0];
+
+		// InterlockedIncrement(LONGevent_queue
+		// int count = (int)InterlockedIncrement((LONG *)&event_count) - 1;
+		// event_queue[count] = e;
+
+		// WaitForSingleObject(mutex, INFINITE);
+		event_queue[event_count++] = e;
+		// ReleaseMutex(mutex);
+	}
+
+	if (len > 1) {
+		printf("%d bytes: %s\n", len, buffer);
+	}
 }

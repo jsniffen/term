@@ -20,16 +20,11 @@ int main(void)
 	swap_buffers(&t);
 	render_terminal(&t);
 
-	DWORD err;
-	err = GetLastError();
-	char read_buffer[32];
-	DWORD r = read_terminal(&t, read_buffer, 32);
-	err = GetLastError();
-
 	union event e;
 	while (running) {
 		while (poll_event_terminal(&t, &e)) {
 			if (e.type == KeyboardEvent) {
+				printf("handling event: %c\n", e.keyboard.key);
 				if (e.keyboard.key == 'q') {
 					running = false;
 					break;
@@ -37,7 +32,7 @@ int main(void)
 			}
 		}
 
-		Sleep(500);
+		Sleep(100);
 	}
 
 	return 0;
