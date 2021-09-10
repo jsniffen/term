@@ -11,6 +11,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
 
 #elif _WIN32
 
@@ -78,7 +79,6 @@ struct terminal {
 bool create_terminal(struct terminal *t);
 bool close_terminal(struct terminal *t);
 bool write_terminal(struct terminal *t, char *buffer, int len);
-DWORD read_terminal(struct terminal *t, char *buffer, int len);
 void parse_terminal_input(struct terminal *t, char *buffer, int len);
 
 #ifdef _WIN32
@@ -97,12 +97,6 @@ DWORD handle_stdin(struct terminal *t)
 	}
 
 	return 0;
-}
-
-DWORD read_terminal(struct terminal *t, char *buffer, int len)
-{
-	DWORD r;
-	return ReadFile(t->console_stdin, buffer, len, &r, 0);
 }
 
 bool write_terminal(struct terminal *t, char *buffer, int len)
@@ -144,11 +138,28 @@ bool create_terminal(struct terminal *t)
 #endif
 
 #ifdef __linux__
+
+// linux
+void *handle_stdin(void *ptr)
+{
+	struct terminal *t = (struct terminal *)ptr;
+	char buffer[32];
+
+	while (true) {
+		int r = read(0, buffer, 32);
+		parse_terminal_input(t, buffer, r);
+		printf("%c\n", buffer);
+	}
+
+	return 0;
+}
+
 bool write_terminal(struct terminal *t, char *buffer, int len)
 {
 	return write(t->fd, buffer, len) != -1;
 }
 
+// linux
 bool create_terminal(struct terminal *t)
 {
 	t->fd = open("/dev/tty", O_RDWR);
@@ -169,7 +180,7 @@ bool create_terminal(struct terminal *t)
 	tios.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
 	tios.c_cflag &= ~(CSIZE | PARENB);
 	tios.c_cflag |= CS8;
-	tios.c_cc[VMIN] = 0;
+	tios.c_cc[VMIN] = 1;
 	tios.c_cc[VTIME] = 0;
 	tcsetattr(t->fd, TCSAFLUSH, &tios);
 
@@ -177,6 +188,10 @@ bool create_terminal(struct terminal *t)
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
 	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
+
+	pthread_t pt;
+
+	pthread_create(&pt, 0, handle_stdin, (void *)&t);
 
 	return true;
 }

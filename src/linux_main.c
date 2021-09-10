@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -21,7 +22,7 @@ int main(void)
 
 	union event e;
 	while (running) {
-		while (poll_event_terminal(&e)) {
+		while (poll_event_terminal(&t, &e)) {
 			if (e.type == KeyboardEvent) {
 				if (e.keyboard.key == 'q') {
 					running = false;
@@ -30,7 +31,7 @@ int main(void)
 			}
 		}
 
-		sleep(1);
+		usleep(16000);
 	}
 
 	close_terminal(&t);
