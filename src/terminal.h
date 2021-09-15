@@ -21,10 +21,18 @@
 
 #endif
 
-
 #define CSI "\x1b["
 
-enum {
+enum Key {
+	Key0 = 48, Key1, Key2, Key3, Key4, Key5, Key6, Key7, Key8, Key9,
+	KeyColon, KeySemiColon, KeyLess, KeyEquals, KeyGreater, KeyQuestion, KeyAt,
+
+	KeyA = 65, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
+
+	Keya = 97, Keyb, Keyc, Keyd, Keye, Keyf, Keyg, Keyh, Keyi, Keyj, Keyk, Keyl, Keym, Keyn, Keyo, Keyp, Keyq, Keyr, Keys, Keyt, Keyu, Keyv, Keyw, Keyx, Keyy, Keyz,
+};
+
+enum EventType {
 	KeyboardEvent,
 	MouseEvent,
 	WindowEvent,
@@ -33,7 +41,7 @@ enum {
 struct keyboard_event {
 	uint32_t type;
 
-	char key;
+	enum Key key;
 };
 
 union event {
@@ -305,9 +313,21 @@ void parse_terminal_input(struct terminal *t, char *buffer, int len)
 	if (len <= 0) return;
 
 	if (len == 1) {
+		switch (buffer[0]) {
+			case 0x7f:
+				printf("backspace\n");
+				return;
+			case 0x1a:
+				printf("pause\n");
+				return;
+			case 0x1b:
+				printf("escape\n");
+				return;
+		}
+
 		union event e;
 		e.type = KeyboardEvent;
-		e.keyboard.key = buffer[0];
+		e.keyboard.key = (enum Key)buffer[0];
 
 		// InterlockedIncrement(LONGevent_queue
 		// int count = (int)InterlockedIncrement((LONG *)&event_count) - 1;
@@ -318,7 +338,122 @@ void parse_terminal_input(struct terminal *t, char *buffer, int len)
 		// ReleaseMutex(mutex);
 	}
 
-	if (len > 1) {
-		printf("%d bytes: %s\n", len, buffer);
+	if (buffer[0] == 0x1b && buffer[1] == 'O') {
+		switch (buffer[2]) {
+			case 'P':
+				printf("F1\n");
+				return;
+			case 'Q':
+				printf("F2\n");
+				return;
+			case 'R':
+				printf("F3\n");
+				return;
+			case 'S':
+				printf("F4\n");
+				return;
+		}
 	}
+
+	if (buffer[0] == 0x1b && buffer[1] == '[') {
+		if (len == 6) {
+			if (buffer[2] == '1' && buffer[3] == ';' && buffer[4] == '5') {
+				switch (buffer[5]) {
+					case 'A':
+						printf("Ctrl + Up\n");
+						return;
+					case 'B':
+						printf("Ctrl + Down\n");
+						return;
+					case 'C':
+						printf("Ctrl + Right\n");
+						return;
+					case 'D':
+						printf("Ctrl + Left\n");
+						return;
+				}
+			}
+		}
+		
+		if (len == 5) {
+			if (buffer[4] == '~') {
+				if (buffer[2] == '1') {
+					switch (buffer[3]) {
+						case '5':
+							printf("F5\n");
+							return;
+						case '7':
+							printf("F6\n");
+							return;
+						case '8':
+							printf("F7\n");
+							return;
+						case '9':
+							printf("F8\n");
+							return;
+					}
+				}
+				if (buffer[2] == '2') {
+					switch (buffer[3]) {
+						case '0':
+							printf("F9\n");
+							return;
+						case '1':
+							printf("F10\n");
+							return;
+						case '3':
+							printf("F11\n");
+							return;
+						case '4':
+							printf("F12\n");
+							return;
+					}
+				}
+			}
+		}
+
+		if (len == 4) {
+			if (buffer[3] == '~') {
+				switch (buffer[2]) {
+					case '2':
+						printf("Insert\n");
+						return;
+					case '3':
+						printf("Delete\n");
+						return;
+					case '5':
+						printf("Page Up\n");
+						return;
+					case '6':
+						printf("Page Down\n");
+						return;
+				}
+			}
+		}
+
+		if (len == 3) {
+			switch (buffer[2]) {
+				case 'A':
+					printf("Up\n");
+					return;
+				case 'B':
+					printf("Down\n");
+					return;
+				case 'C':
+					printf("Right\n");
+					return;
+				case 'D':
+					printf("Left\n");
+					return;
+				case 'H':
+					printf("Home\n");
+					return;
+				case 'F':
+					printf("End\n");
+					return;
+			}
+		}
+	}
+
+	printf("%d bytes: %s\n", len, buffer);
 }
