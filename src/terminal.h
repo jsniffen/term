@@ -24,24 +24,31 @@
 #define CSI "\x1b["
 
 enum Key {
-	Key0 = 48, Key1, Key2, Key3, Key4, Key5, Key6, Key7, Key8, Key9,
+	KeyBackSpace = 8, KeyTab,
+	KeyEnter = 13,
+
+	KeySpace = 32, KeyExclamation, KeyQuote, KeyNumber, KeyDollar, KeyPercent, KeyAmpersand, KeyApostrophe,
+	KeyLParen, KeyRParen, KeyAsterisk, KeyPlus, KeyComma, KeyMinus, KeyPeriod, KeyForwardslash,
+
+	Key0, Key1, Key2, Key3, Key4, Key5, Key6, Key7, Key8, Key9,
+
 	KeyColon, KeySemiColon, KeyLess, KeyEquals, KeyGreater, KeyQuestion, KeyAt,
 
-	KeyA = 65, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
-
-	Keya = 97, Keyb, Keyc, Keyd, Keye, Keyf, Keyg, Keyh, Keyi, Keyj, Keyk, Keyl, Keym, Keyn, Keyo, Keyp, Keyq, Keyr, Keys, Keyt, Keyu, Keyv, Keyw, Keyx, Keyy, Keyz,
+	KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
+	KeyLBracket, KeyBackslash, KeyRBracket, KeyCaret, KeyUnderscore, KeyBacktick,
+	Keya, Keyb, Keyc, Keyd, Keye, Keyf, Keyg, Keyh, Keyi, Keyj, Keyk, Keyl, Keym, Keyn, Keyo, Keyp, Keyq, Keyr, Keys, Keyt, Keyu, Keyv, Keyw, Keyx, Keyy, Keyz,
+	KeyLCurlyBracket, KeyBar, KeyRCurlyBracket, KeyTilde, KeyDelete,
 };
 
 enum EventType {
 	KeyboardEvent,
-	MouseEvent,
 	WindowEvent,
 };
 
 struct keyboard_event {
 	uint32_t type;
-
 	enum Key key;
+	bool alt;
 };
 
 union event {
@@ -156,7 +163,6 @@ void *handle_stdin(void *ptr)
 	while (true) {
 		int r = read(0, buffer, 32);
 		parse_terminal_input(t, buffer, r);
-		printf("%c\n", buffer);
 	}
 
 	return 0;
@@ -310,6 +316,8 @@ bool poll_event_terminal(struct terminal *t, union event *e)
 // add them into the event queue.
 void parse_terminal_input(struct terminal *t, char *buffer, int len)
 {
+	// printf("total: %d\t1: %x\t2: %c\n", len, buffer[0], buffer[1]);
+	// printf("%d bytes: %x\n", len, buffer);
 	if (len <= 0) return;
 
 	if (len == 1) {
@@ -328,6 +336,7 @@ void parse_terminal_input(struct terminal *t, char *buffer, int len)
 		union event e;
 		e.type = KeyboardEvent;
 		e.keyboard.key = (enum Key)buffer[0];
+		e.keyboard.alt = false;
 
 		// InterlockedIncrement(LONGevent_queue
 		// int count = (int)InterlockedIncrement((LONG *)&event_count) - 1;
@@ -336,6 +345,23 @@ void parse_terminal_input(struct terminal *t, char *buffer, int len)
 		// WaitForSingleObject(mutex, INFINITE);
 		event_queue[event_count++] = e;
 		// ReleaseMutex(mutex);
+		return;
+	}
+
+	if (len == 2 && buffer[0] == 0x1b) {
+		union event e;
+		e.type = KeyboardEvent;
+		e.keyboard.key = (enum Key)buffer[1];
+		e.keyboard.alt = true;
+
+		// InterlockedIncrement(LONGevent_queue
+		// int count = (int)InterlockedIncrement((LONG *)&event_count) - 1;
+		// event_queue[count] = e;
+
+		// WaitForSingleObject(mutex, INFINITE);
+		event_queue[event_count++] = e;
+		// ReleaseMutex(mutex);
+		return;
 	}
 
 	if (buffer[0] == 0x1b && buffer[1] == 'O') {
@@ -454,6 +480,4 @@ void parse_terminal_input(struct terminal *t, char *buffer, int len)
 			}
 		}
 	}
-
-	printf("%d bytes: %s\n", len, buffer);
 }

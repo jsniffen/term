@@ -24,8 +24,23 @@ int main(void)
 	while (running) {
 		while (poll_event_terminal(&t, &e)) {
 			if (e.type == KeyboardEvent) {
-				if (e.keyboard.key == 'q') {
+				// printf("handling event: %c\n", e.keyboard.key);
+
+				if (e.keyboard.key == KeyA) {
+					printf("A\n");
+				}
+
+				if (e.keyboard.key == Key0) {
+					printf("0\n");
+				}
+
+				if (e.keyboard.alt && (e.keyboard.key == Keyq || e.keyboard.key == KeyQ)) {
 					running = false;
+					break;
+				}
+
+				if (e.keyboard.key == KeyEnter) {
+					printf("TEST\n");
 					break;
 				}
 			}
