@@ -34,8 +34,13 @@ int main(void)
 					printf("0\n");
 				}
 
-				if (e.keyboard.key == Keyq || e.keyboard.key == KeyQ) {
+				if (e.keyboard.alt && (e.keyboard.key == Keyq || e.keyboard.key == KeyQ)) {
 					running = false;
+					break;
+				}
+
+				if (e.keyboard.key == KeyTilde) {
+					printf("TEST\n");
 					break;
 				}
 			}

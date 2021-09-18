@@ -1,3 +1,12 @@
+//TODO(Julian): 
+// (1) Synchronize event threading
+// (2) Handle UTF-8
+// (3) Window Resize Events
+// (4) Detect terminal type
+//     - color support
+//     - ANSI code support
+// (5) Memory allocation
+
 #include <stdbool.h>
 #include <stdint.h>
 
