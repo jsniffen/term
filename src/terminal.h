@@ -221,6 +221,7 @@ bool create_terminal(struct terminal *t)
 
 	t->code_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
 	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
+	t->code_buffer_index = 0;
 
 	pthread_t pt;
 
