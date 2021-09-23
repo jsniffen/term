@@ -93,11 +93,11 @@ struct terminal {
 	uint32_t width;
 	uint32_t height;
 
-	uint8_t *write_buffer;
+	uint8_t *code_buffer;
+	uint64_t code_buffer_index;
 
 	struct cell *front_buffer;
 	struct cell *back_buffer;
-	bool *diff_buffer;
 };
 
 bool create_terminal(struct terminal *t);
@@ -149,10 +149,16 @@ bool create_terminal(struct terminal *t)
 	t->width = info.srWindow.Right - info.srWindow.Left + 1;
 	t->height = info.srWindow.Bottom - info.srWindow.Top + 1;
 
-	t->write_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
+	memset(t->front_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
+
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
+	memset(t->back_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
+
+	t->code_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
+	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
+
+	t->code_buffer_index = 0;
 
 	DWORD thread_id;
 	CreateThread(0, 0, handle_stdin, t, 0, &thread_id);
@@ -207,10 +213,14 @@ bool create_terminal(struct terminal *t)
 	tios.c_cc[VTIME] = 0;
 	tcsetattr(t->fd, TCSAFLUSH, &tios);
 
-	t->write_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
+	memset(t->front_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
+
 	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	t->diff_buffer = (bool *)malloc(sizeof(bool)*32*t->width*t->height);
+	memset(t->back_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
+
+	t->code_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
+	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
 
 	pthread_t pt;
 
@@ -225,64 +235,80 @@ bool close_terminal(struct terminal *t)
 }
 #endif
 
-bool flush_terminal(struct terminal *t, int len)
+static int last_x, last_y;
+static struct cell last_cell;
+
+void send_code(struct terminal *t, int x, int y, struct cell *c)
 {
-	return write_terminal(t, t->write_buffer, len);
+	char b[32];
+
+	if ((last_x == 0 && last_y == 0) || x - 1 != last_x || y != last_y) {
+		t->code_buffer_index += sprintf(&t->code_buffer[t->code_buffer_index], CSI "%d;%dH", y+1, x+1);
+	}
+
+
+	if (memcmp(&last_cell.bg, &c->bg, sizeof(struct color)) != 0) {
+		t->code_buffer_index += sprintf(&t->code_buffer[t->code_buffer_index], CSI "48;2;%d;%d;%dm", c->bg.r, c->bg.g, c->bg.b);
+	}
+
+	if (memcmp(&last_cell.fg, &c->fg, sizeof(struct color)) != 0) {
+		t->code_buffer_index += sprintf(&t->code_buffer[t->code_buffer_index], CSI "38;2;%d;%d;%dm", c->fg.r, c->fg.g, c->fg.b);
+	}
+
+	t->code_buffer[t->code_buffer_index++] = c->c;
+
+	last_x = x;
+	last_y = y;
+	memcpy(&last_cell, c, sizeof(struct cell));
 }
 
-bool set_cell(struct terminal *t, int x, int y, struct cell c)
+bool flush_terminal(struct terminal *t)
 {
-	int os = t->width*y + x;
-	t->diff_buffer[os] = true;
-	t->back_buffer[os] = c;
+	write_terminal(t, t->code_buffer, t->code_buffer_index);
+	t->code_buffer_index = 0;
 	return true;
+}
+
+bool set_cell(struct terminal *t, int x, int y, struct cell *c)
+{
+	memcpy(&t->back_buffer[t->width*y + x], c, sizeof(struct cell));
 }
 
 bool clear_terminal(struct terminal *t)
 {
 	for (int y = 0; y < t->height; ++y) {
 		for (int x = 0; x < t->width; ++x) {
-			struct cell c;
-			c.fg.r = 255;
-			c.fg.b = 255;
-			c.fg.g = 255;
-			c.bg.r = 0;
-			c.bg.b = 0;
-			c.bg.g = 0;
-			c.c = 'x';
-			set_cell(t, x, y, c);
+			struct cell c = {
+				.bg = {0, 0, 255},
+				.fg = {255, 255, 255},
+				.c = ' ',
+			};
+			set_cell(t, x, y, &c);
 		}
 	}
 	return true;
 }
 
-void swap_buffers(struct terminal *t)
-{
-	struct cell *fb = t->front_buffer;
-	struct cell *bb = t->back_buffer;
-	bool *db = t->diff_buffer;
-
-	for (int os = 0; os < t->width*t->height; ++os) {
-		if (db[os]) fb[os] = bb[os];
-	}
-}
-
 bool render_terminal(struct terminal *t)
 {
-	uint8_t *wb = t->write_buffer;
-	struct cell *fb = t->front_buffer;
-	bool *db = t->diff_buffer;
+	struct cell *back = t->back_buffer;
+	struct cell *front = t->front_buffer;
 
-	for (int os = 0; os < t->width*t->height; ++os) {
-		if (db[os]) {
-			struct cell c = fb[os];
-			wb += sprintf(wb, CSI "48;2;%d;%d;%dm", c.bg.r, c.bg.g, c.bg.b);
-			wb += sprintf(wb, CSI "38;2;%d;%d;%dm", c.fg.r, c.fg.g, c.fg.b);
-			*wb++ = c.c;
+	for (int y = 0; y < t->height; ++y) {
+		for (int x = 0; x < t->width; ++x) {
+			if (memcmp(back, front, sizeof(struct cell)) != 0) {
+				memcpy(front, back, sizeof(struct cell));
+				send_code(t, x, y, front);
+			}
+
+			++back;
+			++front;
 		}
 	}
 
-	return flush_terminal(t, wb - t->write_buffer);
+	write_terminal(t, t->code_buffer, t->code_buffer_index);
+	t->code_buffer_index = 0;
+	return true;
 }
 
 bool reset_terminal(struct terminal *t)
