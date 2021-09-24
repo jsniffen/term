@@ -280,7 +280,7 @@ bool clear_terminal(struct terminal *t)
 	for (int y = 0; y < t->height; ++y) {
 		for (int x = 0; x < t->width; ++x) {
 			struct cell c = {
-				.bg = {0, 0, 255},
+				.bg = {0, 0, 0},
 				.fg = {255, 255, 255},
 				.c = ' ',
 			};
