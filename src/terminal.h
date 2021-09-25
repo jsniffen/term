@@ -32,6 +32,28 @@
 
 #define CSI "\x1b["
 
+int parse_number(int num, char *buf)
+{
+	char *c = buf;
+	int l = 0;
+	for (int n = num; n > 0; n /= 10)
+	{
+		*c++ = '0' + n % 10;
+		++l;
+	}
+
+	for (int i = 0; i < l/2; ++i) {
+		char t = buf[i];
+		buf[i] = buf[l - i - 1];
+		buf[l - i - 1] = t;
+	}
+
+	return l;
+}
+
+#define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
+#define append_number(terminal, number, buffer) append_bytes(terminal, buffer, parse_number(number, buffer))
+
 enum Key {
 	KeyBackSpace = 8, KeyTab,
 	KeyEnter = 13,
@@ -239,21 +261,44 @@ bool close_terminal(struct terminal *t)
 static int last_x, last_y;
 static struct cell last_cell;
 
+void append_bytes(struct terminal *t, uint8_t *b, int l)
+{
+	//TODO(Julian): Check memcpy out of bounds.
+	uint8_t *cb = &t->code_buffer[t->code_buffer_index];
+	memcpy(cb, b, l);
+	t->code_buffer_index += l;
+}
+
+
+void append_code(struct terminal *t, char *code)
+{
+	int len = strlen(code);
+	if (len == 0) return;
+
+	//TODO(Julian): Check memcpy out of bounds.
+	uint8_t *code_buffer = &t->code_buffer[t->code_buffer_index];
+	memcpy(code_buffer, code, len);
+
+	t->code_buffer_index += len;
+}
+
 void send_code(struct terminal *t, int x, int y, struct cell *c)
 {
 	char b[32];
 
 	if ((last_x == 0 && last_y == 0) || x - 1 != last_x || y != last_y) {
-		t->code_buffer_index += sprintf(&t->code_buffer[t->code_buffer_index], CSI "%d;%dH", y+1, x+1);
+		sprintf(b, CSI "%d;%dH", y+1, x+1);
+		append_code(t, b);
 	}
 
-
 	if (memcmp(&last_cell.bg, &c->bg, sizeof(struct color)) != 0) {
-		t->code_buffer_index += sprintf(&t->code_buffer[t->code_buffer_index], CSI "48;2;%d;%d;%dm", c->bg.r, c->bg.g, c->bg.b);
+		sprintf(b, CSI "48;2;%d;%d;%dm", c->bg.r, c->bg.g, c->bg.b); 
+		append_code(t, b);
 	}
 
 	if (memcmp(&last_cell.fg, &c->fg, sizeof(struct color)) != 0) {
-		t->code_buffer_index += sprintf(&t->code_buffer[t->code_buffer_index], CSI "38;2;%d;%d;%dm", c->fg.r, c->fg.g, c->fg.b);
+		sprintf(b, CSI "38;2;%d;%d;%dm", c->fg.r, c->fg.g, c->fg.b);
+		append_code(t, b);
 	}
 
 	t->code_buffer[t->code_buffer_index++] = c->c;
@@ -299,6 +344,7 @@ bool render_terminal(struct terminal *t)
 		for (int x = 0; x < t->width; ++x) {
 			if (memcmp(back, front, sizeof(struct cell)) != 0) {
 				memcpy(front, back, sizeof(struct cell));
+
 				send_code(t, x, y, front);
 			}
 
@@ -324,14 +370,20 @@ bool set_cursor_position_terminal(struct terminal *t, int x, int y)
 	return write_terminal(t, b, strlen(b));
 }
 
-bool hide_cursor_terminal(struct terminal *t)
+void hide_cursor_terminal(struct terminal *t)
 {
-	return write_terminal(t, CSI "?25l", 6);
+	char buf[32];
+	append_literal(t, CSI "?");
+	append_number(t, 25, buf);
+	append_literal(t, "l");
+	// append_code(t, CSI "?25l");
+	//return write_terminal(t, CSI "?25l", 6);
 }
 
-bool show_cursor_terminal(struct terminal *t)
+void show_cursor_terminal(struct terminal *t)
 {
-	return write_terminal(t, CSI "?25h", 6);
+	append_code(t, CSI "?25h");
+	//return write_terminal(t, CSI "?25h", 6);
 }
 
 bool poll_event_terminal(struct terminal *t, union event *e)

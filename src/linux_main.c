@@ -53,6 +53,12 @@ int main(void)
 				if (e.keyboard.key == Keyl) {
 					++x;
 				}
+				if (e.keyboard.key == Keys) {
+					show_cursor_terminal(&t);
+				}
+				if (e.keyboard.key == Keye) {
+					hide_cursor_terminal(&t);
+				}
 			}
 		}
 
