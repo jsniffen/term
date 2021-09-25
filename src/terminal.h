@@ -6,6 +6,7 @@
 //     - color support
 //     - ANSI code support
 // (5) Memory allocation
+// (6) Logging
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,23 +37,20 @@ int parse_number(int num, char *buf)
 {
 	char *c = buf;
 	int l = 0;
-	for (int n = num; n > 0; n /= 10)
-	{
+
+	for (int n = num; n > 0; n /= 10) {
 		*c++ = '0' + n % 10;
 		++l;
 	}
 
 	for (int i = 0; i < l/2; ++i) {
 		char t = buf[i];
-		buf[i] = buf[l - i - 1];
-		buf[l - i - 1] = t;
+		buf[i] = buf[l-i-1];
+		buf[l-i-1] = t;
 	}
 
 	return l;
 }
-
-#define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
-#define append_number(terminal, number, buffer) append_bytes(terminal, buffer, parse_number(number, buffer))
 
 enum Key {
 	KeyBackSpace = 8, KeyTab,
@@ -269,6 +267,8 @@ void append_bytes(struct terminal *t, uint8_t *b, int l)
 	t->code_buffer_index += l;
 }
 
+#define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
+#define append_number(terminal, number, buffer) append_bytes(terminal, buffer, parse_number(number, buffer))
 
 void append_code(struct terminal *t, char *code)
 {

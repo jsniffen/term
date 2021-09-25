@@ -30,10 +30,8 @@ int main(void)
 		return -1;
 	}
 
-	union event e;
-	int idx = 0;
-
 	int y, x = 0;
+	union event e;
 	while (running) {
 		while (poll_event_terminal(&t, &e)) {
 			if (e.type == KeyboardEvent) {
@@ -63,7 +61,6 @@ int main(void)
 		}
 
 		clear_terminal(&t);
-
 
 		modal(&t, x, y, 10, 10);
 
