@@ -53,7 +53,7 @@ int parse_number(int num, char *buf)
 }
 
 struct slice {
-	void *buf;
+	uint8_t *buf;
 	int cap;
 	int len;
 };
@@ -81,7 +81,7 @@ void slice_append(struct slice *s, void *data, int size)
 	}
 
 	if (cap > s->cap) {
-		void *buf = malloc(cap);
+		uint8_t *buf = malloc(cap);
 		memcpy(buf, s->buf, s->len);
 		free(s->buf);
 		s->buf = buf;
@@ -222,6 +222,7 @@ bool create_terminal(struct terminal *t)
 
 	t->code_buffer_index = 0;
 
+	t->buffer = (struct slice *)malloc(sizeof(struct slice));
 	slice_init(t->buffer, 256);
 
 	DWORD thread_id;
@@ -360,18 +361,10 @@ void send_code(struct terminal *t, int x, int y, struct cell *c)
 	memcpy(&last_cell, c, sizeof(struct cell));
 }
 
-bool flush_terminal(struct terminal *t)
-{
-	write_terminal(t, t->buffer->buf, t->buffer->len);
-	t->buffer->len = 0;
-	// write_terminal(t, t->code_buffer, t->code_buffer_index);
-	// t->code_buffer_index = 0;
-	// return true;
-}
-
 bool set_cell(struct terminal *t, int x, int y, struct cell *c)
 {
 	memcpy(&t->back_buffer[t->width*y + x], c, sizeof(struct cell));
+	return true;
 }
 
 bool clear_terminal(struct terminal *t)
