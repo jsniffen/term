@@ -52,6 +52,46 @@ int parse_number(int num, char *buf)
 	return l;
 }
 
+struct slice {
+	void *buf;
+	int cap;
+	int len;
+};
+
+void slice_init(struct slice *s, int cap)
+{
+	s->len = 0;
+	s->cap = cap;
+	s->buf = (void *)malloc(cap);
+}
+
+void slice_free(struct slice *s)
+{
+	s->len = 0;
+	s->cap = 0;
+	free(s->buf);
+}
+
+void slice_append(struct slice *s, void *data, int size)
+{
+	int cap = s->cap;
+
+	while (cap - s->len < size) {
+		cap *= 2;
+	}
+
+	if (cap > s->cap) {
+		void *buf = malloc(cap);
+		memcpy(buf, s->buf, s->len);
+		free(s->buf);
+		s->buf = buf;
+		s->cap = cap;
+	}
+
+	memcpy(s->buf + s->len, data, size);
+	s->len += size;
+}
+
 enum Key {
 	KeyBackSpace = 8, KeyTab,
 	KeyEnter = 13,
@@ -118,6 +158,8 @@ struct terminal {
 
 	struct cell *front_buffer;
 	struct cell *back_buffer;
+
+	struct slice *buffer;
 };
 
 bool create_terminal(struct terminal *t);
@@ -179,6 +221,8 @@ bool create_terminal(struct terminal *t)
 	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
 
 	t->code_buffer_index = 0;
+
+	slice_init(t->buffer, 256);
 
 	DWORD thread_id;
 	CreateThread(0, 0, handle_stdin, t, 0, &thread_id);
@@ -243,6 +287,9 @@ bool create_terminal(struct terminal *t)
 	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
 	t->code_buffer_index = 0;
 
+	t->buffer = (struct slice *)malloc(sizeof(struct slice));
+	slice_init(t->buffer, 256);
+
 	pthread_t pt;
 
 	pthread_create(&pt, 0, handle_stdin, (void *)&t);
@@ -261,10 +308,11 @@ static struct cell last_cell;
 
 void append_bytes(struct terminal *t, uint8_t *b, int l)
 {
+	slice_append(t->buffer, b, l);
 	//TODO(Julian): Check memcpy out of bounds.
-	uint8_t *cb = &t->code_buffer[t->code_buffer_index];
-	memcpy(cb, b, l);
-	t->code_buffer_index += l;
+	// uint8_t *cb = &t->code_buffer[t->code_buffer_index];
+	// memcpy(cb, b, l);
+	// t->code_buffer_index += l;
 }
 
 #define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
@@ -287,21 +335,25 @@ void send_code(struct terminal *t, int x, int y, struct cell *c)
 	char b[32];
 
 	if ((last_x == 0 && last_y == 0) || x - 1 != last_x || y != last_y) {
-		sprintf(b, CSI "%d;%dH", y+1, x+1);
-		append_code(t, b);
+		int l = sprintf(b, CSI "%d;%dH", y+1, x+1);
+		append_bytes(t, b, l);
+		// append_code(t, b);
 	}
 
 	if (memcmp(&last_cell.bg, &c->bg, sizeof(struct color)) != 0) {
-		sprintf(b, CSI "48;2;%d;%d;%dm", c->bg.r, c->bg.g, c->bg.b); 
-		append_code(t, b);
+		int l = sprintf(b, CSI "48;2;%d;%d;%dm", c->bg.r, c->bg.g, c->bg.b); 
+		append_bytes(t, b, l);
+		// append_code(t, b);
 	}
 
 	if (memcmp(&last_cell.fg, &c->fg, sizeof(struct color)) != 0) {
-		sprintf(b, CSI "38;2;%d;%d;%dm", c->fg.r, c->fg.g, c->fg.b);
-		append_code(t, b);
+		int l = sprintf(b, CSI "38;2;%d;%d;%dm", c->fg.r, c->fg.g, c->fg.b);
+		append_bytes(t, b, l);
+		// append_code(t, b);
 	}
 
-	t->code_buffer[t->code_buffer_index++] = c->c;
+	append_bytes(t, &c->c, 1);
+	// t->code_buffer[t->code_buffer_index++] = c->c;
 
 	last_x = x;
 	last_y = y;
@@ -310,9 +362,11 @@ void send_code(struct terminal *t, int x, int y, struct cell *c)
 
 bool flush_terminal(struct terminal *t)
 {
-	write_terminal(t, t->code_buffer, t->code_buffer_index);
-	t->code_buffer_index = 0;
-	return true;
+	write_terminal(t, t->buffer->buf, t->buffer->len);
+	t->buffer->len = 0;
+	// write_terminal(t, t->code_buffer, t->code_buffer_index);
+	// t->code_buffer_index = 0;
+	// return true;
 }
 
 bool set_cell(struct terminal *t, int x, int y, struct cell *c)
@@ -353,8 +407,8 @@ bool render_terminal(struct terminal *t)
 		}
 	}
 
-	write_terminal(t, t->code_buffer, t->code_buffer_index);
-	t->code_buffer_index = 0;
+	write_terminal(t, t->buffer->buf, t->buffer->len);
+	t->buffer->len = 0;
 	return true;
 }
 
@@ -382,7 +436,10 @@ void hide_cursor_terminal(struct terminal *t)
 
 void show_cursor_terminal(struct terminal *t)
 {
-	append_code(t, CSI "?25h");
+	char buf[32];
+	append_literal(t, CSI "?");
+	append_number(t, 25, buf);
+	append_literal(t, "h");
 	//return write_terminal(t, CSI "?25h", 6);
 }
 
