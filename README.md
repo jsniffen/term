@@ -1,2 +1,0 @@
-# finn
-A terminal multiplexer
