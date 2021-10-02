@@ -8,6 +8,17 @@
 // (5) Memory allocation
 // (6) Logging
 
+/*
+ High Level Terminal Interface:
+
+bool create_terminal(struct terminal *t);
+bool set_cell(struct terminal *t, int x, int y, struct cell *c)
+
+bool poll_event_terminal(struct terminal *t, union event *e)
+bool clear_terminal(struct terminal *t)
+bool render_terminal(struct terminal *t)
+*/
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -160,6 +171,9 @@ struct terminal {
 	struct cell *back_buffer;
 
 	struct slice *buffer;
+
+	int cursor_x;
+	int cursor_y;
 };
 
 bool create_terminal(struct terminal *t);
@@ -295,6 +309,9 @@ bool create_terminal(struct terminal *t)
 
 	pthread_create(&pt, 0, handle_stdin, (void *)&t);
 
+	t->cursor_x = 0;
+	t->cursor_y = 0;
+
 	return true;
 }
 
@@ -382,39 +399,16 @@ bool clear_terminal(struct terminal *t)
 	return true;
 }
 
-bool render_terminal(struct terminal *t)
+void set_cursor_terminal(struct terminal *t, int x, int y)
 {
-	struct cell *back = t->back_buffer;
-	struct cell *front = t->front_buffer;
-
-	for (int y = 0; y < t->height; ++y) {
-		for (int x = 0; x < t->width; ++x) {
-			if (memcmp(back, front, sizeof(struct cell)) != 0) {
-				memcpy(front, back, sizeof(struct cell));
-
-				send_code(t, x, y, front);
-			}
-
-			++back;
-			++front;
-		}
-	}
-
-	write_terminal(t, t->buffer->buf, t->buffer->len);
-	t->buffer->len = 0;
-	return true;
-}
-
-bool reset_terminal(struct terminal *t)
-{
-	return write_terminal(t, CSI "0m", 4);
-}
-
-bool set_cursor_position_terminal(struct terminal *t, int x, int y)
-{
-	char b[32];
-	sprintf(b, CSI "%d;%dH", y, x);
-	return write_terminal(t, b, strlen(b));
+	char buf[32];
+	append_literal(t, CSI);
+	append_number(t, ++y, buf);
+	append_literal(t, ";");
+	append_number(t, ++x, buf);
+	append_literal(t, "H");
+	// sprintf(b, CSI "%d;%dH", y, x);
+	// return write_terminal(t, b, strlen(b));
 }
 
 void hide_cursor_terminal(struct terminal *t)
@@ -435,6 +429,38 @@ void show_cursor_terminal(struct terminal *t)
 	append_literal(t, "h");
 	//return write_terminal(t, CSI "?25h", 6);
 }
+
+bool render_terminal(struct terminal *t)
+{
+	hide_cursor_terminal(t);
+	struct cell *back = t->back_buffer;
+	struct cell *front = t->front_buffer;
+
+	for (int y = 0; y < t->height; ++y) {
+		for (int x = 0; x < t->width; ++x) {
+			if (memcmp(back, front, sizeof(struct cell)) != 0) {
+				memcpy(front, back, sizeof(struct cell));
+
+				send_code(t, x, y, front);
+			}
+
+			++back;
+			++front;
+		}
+	}
+
+	set_cursor_terminal(t, t->cursor_x, t->cursor_y);
+	show_cursor_terminal(t);
+	write_terminal(t, t->buffer->buf, t->buffer->len);
+	t->buffer->len = 0;
+	return true;
+}
+
+bool reset_terminal(struct terminal *t)
+{
+	return write_terminal(t, CSI "0m", 4);
+}
+
 
 bool poll_event_terminal(struct terminal *t, union event *e)
 {
