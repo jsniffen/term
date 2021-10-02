@@ -18,6 +18,8 @@ var (
 	Red   = Color{255, 0, 0}
 	Green = Color{0, 255, 0}
 	Blue  = Color{0, 0, 255}
+
+	Running = true
 )
 
 type Color struct {
@@ -32,6 +34,10 @@ type Cell struct {
 	r  byte
 }
 
+type Event struct {
+	key byte
+}
+
 type Terminal struct {
 	termios *unix.Termios
 	fd      int
@@ -43,12 +49,14 @@ type Terminal struct {
 	frontBuffer []Cell
 	buffer      []byte
 
+	events []Event
+
 	lastCell Cell
 	lastX    int
 	lastY    int
 }
 
-func create_terminal() (*Terminal, error) {
+func createTerminal() (*Terminal, error) {
 	var err error
 	t := &Terminal{}
 
@@ -85,6 +93,10 @@ func create_terminal() (*Terminal, error) {
 	t.frontBuffer = make([]Cell, 4096)
 	t.backBuffer = make([]Cell, 4096)
 	t.buffer = make([]byte, 4096)
+
+	t.events = make([]Event, 0)
+
+	go t.readEvents()
 
 	return t, nil
 }
@@ -160,6 +172,32 @@ func (t *Terminal) setCursor(x int, y int) error {
 	return err
 }
 
+func (t *Terminal) readEvents() {
+	for true {
+		b := make([]byte, 32)
+		n, err := unix.Read(t.fd, b)
+		fmt.Printf("read: %d bytes: %s\n", n, string(b))
+		if err != nil || n == 0 {
+			continue
+		}
+
+		if n == 1 {
+			e := Event{b[0]}
+			t.events = append(t.events, e)
+		}
+	}
+}
+
+func (t *Terminal) pollEvents(e *Event) bool {
+	if len(t.events) == 0 {
+		return false
+	}
+
+	*e = t.events[0]
+	t.events = t.events[1:]
+	return true
+}
+
 func (t *Terminal) modal(x_0, y_0, w, h int) {
 	c := Cell{Blue, White, 'X'}
 	for y := y_0; y < y_0+h; y++ {
@@ -170,19 +208,25 @@ func (t *Terminal) modal(x_0, y_0, w, h int) {
 }
 
 func main() {
-	t, err := create_terminal()
+	t, err := createTerminal()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer t.Close()
 
 	x, y := 0, 0
-	for true {
+	var e Event
+	for Running {
+		for t.pollEvents(&e) {
+			if e.key == 'q' {
+				Running = false
+			}
+		}
 		t.Clear()
 		t.modal(x, y, 10, 10)
 		t.Render()
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(33 * time.Millisecond)
 		x++
 		y++
 	}
