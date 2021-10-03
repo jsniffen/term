@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -49,6 +50,7 @@ type Terminal struct {
 	frontBuffer []Cell
 	buffer      []byte
 
+	mutex  *sync.Mutex
 	events []Event
 
 	lastCell Cell
@@ -94,6 +96,7 @@ func createTerminal() (*Terminal, error) {
 	t.backBuffer = make([]Cell, 4096)
 	t.buffer = make([]byte, 4096)
 
+	t.mutex = &sync.Mutex{}
 	t.events = make([]Event, 0)
 
 	go t.readEvents()
@@ -110,7 +113,7 @@ func (t *Terminal) Clear() {
 		for x := 0; x < t.width; x++ {
 			c := Cell{
 				fg: White,
-				bg: Red,
+				bg: Black,
 				r:  ' ',
 			}
 			t.setCell(x, y, c)
@@ -138,7 +141,7 @@ func (t *Terminal) sendCode(x int, y int, c Cell) {
 	var buf []byte
 
 	if (t.lastX == 0 && t.lastY == 0) || x-1 != t.lastX || y != t.lastY {
-		buf = []byte(fmt.Sprintf("%s%d:%dH", CSI, y+1, x+1))
+		buf = []byte(fmt.Sprintf("%s%d;%dH", CSI, y+1, x+1))
 		t.buffer = append(t.buffer, buf...)
 	}
 
@@ -173,17 +176,20 @@ func (t *Terminal) setCursor(x int, y int) error {
 }
 
 func (t *Terminal) readEvents() {
+	b := make([]byte, 32)
+
 	for true {
-		b := make([]byte, 32)
 		n, err := unix.Read(t.fd, b)
-		fmt.Printf("read: %d bytes: %s\n", n, string(b))
 		if err != nil || n == 0 {
 			continue
 		}
 
 		if n == 1 {
 			e := Event{b[0]}
+
+			t.mutex.Lock()
 			t.events = append(t.events, e)
+			t.mutex.Unlock()
 		}
 	}
 }
@@ -193,8 +199,11 @@ func (t *Terminal) pollEvents(e *Event) bool {
 		return false
 	}
 
+	t.mutex.Lock()
 	*e = t.events[0]
 	t.events = t.events[1:]
+	t.mutex.Unlock()
+
 	return true
 }
 
