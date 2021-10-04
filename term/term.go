@@ -111,6 +111,23 @@ func (t *Terminal) PollEvents(e *Event) bool {
 	return true
 }
 
+func (t *Terminal) parseInput(b []byte, n int) {
+	var e Event
+
+	if n <= 0 {
+		return
+	}
+
+	if n == 1 {
+		e.Key = b[0]
+
+	}
+
+	t.mutex.Lock()
+	t.events = append(t.events, e)
+	t.mutex.Unlock()
+}
+
 func (t *Terminal) Modal(x_0, y_0, w, h int) {
 	c := Cell{Blue, White, 'X'}
 	for y := y_0; y < y_0+h; y++ {

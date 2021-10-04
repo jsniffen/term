@@ -72,7 +72,16 @@ func CreateTerminal() (*Terminal, error) {
 }
 
 func (t *Terminal) Close() error {
+	var err error
+	err = t.Reset()
+	if err != nil {
+		return err
+	}
 	return unix.IoctlSetTermios(t.fd, unix.TCSETS, t.termios)
+}
+
+func (t *Terminal) Reset() error {
+	return t.write([]byte(CSI + "0m"))
 }
 
 func (t *Terminal) write(b []byte) error {
@@ -85,16 +94,9 @@ func (t *Terminal) readEvents() {
 
 	for true {
 		n, err := unix.Read(t.fd, b)
-		if err != nil || n == 0 {
+		if err != nil {
 			continue
 		}
-
-		if n == 1 {
-			e := Event{b[0]}
-
-			t.mutex.Lock()
-			t.events = append(t.events, e)
-			t.mutex.Unlock()
-		}
+		t.parseInput(b, n)
 	}
 }
