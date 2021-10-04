@@ -1,7 +1,6 @@
-package terminal
+package term
 
 import (
-	"fmt"
 	"sync"
 
 	"golang.org/x/sys/unix"
@@ -76,8 +75,7 @@ func (t *Terminal) Close() error {
 	return unix.IoctlSetTermios(t.fd, unix.TCSETS, t.termios)
 }
 
-
-func (t *Terminal) write([]byte b) error {
+func (t *Terminal) write(b []byte) error {
 	_, err := unix.Write(t.fd, b)
 	return err
 }
