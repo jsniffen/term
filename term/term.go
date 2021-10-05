@@ -87,6 +87,10 @@ func (t *Terminal) PollEvents(e *Event) bool {
 	return true
 }
 
+func (t *Terminal) Reset() error {
+	return t.write([]byte(CSI + "0m"))
+}
+
 func (t *Terminal) parseInput(b []byte, n int) {
 	var e Event
 

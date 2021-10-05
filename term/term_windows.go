@@ -80,7 +80,7 @@ func CreateTerminal() (*Terminal, error) {
 }
 
 func (t *Terminal) Close() error {
-	return nil
+	return t.Reset()
 }
 
 func (t *Terminal) write(b []byte) error {
