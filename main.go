@@ -22,16 +22,24 @@ func main() {
 	var e term.Event
 	for Running {
 		for t.PollEvents(&e) {
-			if e.Key == 'q' {
+			switch e.Key {
+			case term.Keyq:
 				Running = false
+			case term.Keyh:
+				x--
+			case term.Keyj:
+				y++
+			case term.Keyk:
+				y--
+			case term.Keyl:
+				x++
 			}
+
 		}
 		t.Clear()
 		t.Modal(x, y, 10, 10)
 		t.Render()
 
 		time.Sleep(33 * time.Millisecond)
-		x++
-		y++
 	}
 }

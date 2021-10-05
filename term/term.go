@@ -2,35 +2,11 @@ package term
 
 import "fmt"
 
+type Key int
+
 const (
 	CSI = "\x1b["
 )
-
-var (
-	Black = Color{0, 0, 0}
-	White = Color{255, 255, 255}
-	Red   = Color{255, 0, 0}
-	Green = Color{0, 255, 0}
-	Blue  = Color{0, 0, 255}
-
-	Running = true
-)
-
-type Color struct {
-	r uint8
-	g uint8
-	b uint8
-}
-
-type Cell struct {
-	fg Color
-	bg Color
-	r  byte
-}
-
-type Event struct {
-	Key byte
-}
 
 func (t *Terminal) setCell(x int, y int, c Cell) {
 	if x < 0 || x >= t.width || y < 0 || y >= t.height {
@@ -119,8 +95,12 @@ func (t *Terminal) parseInput(b []byte, n int) {
 	}
 
 	if n == 1 {
-		e.Key = b[0]
-
+		switch b[0] {
+		case 0x7f:
+			e.Key = KeyBackSpace
+		default:
+			e.Key = Key(b[0])
+		}
 	}
 
 	t.mutex.Lock()
