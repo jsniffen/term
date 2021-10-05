@@ -80,10 +80,6 @@ func (t *Terminal) Close() error {
 	return unix.IoctlSetTermios(t.fd, unix.TCSETS, t.termios)
 }
 
-func (t *Terminal) Reset() error {
-	return t.write([]byte(CSI + "0m"))
-}
-
 func (t *Terminal) write(b []byte) error {
 	_, err := unix.Write(t.fd, b)
 	return err
