@@ -1,82 +1,54 @@
 package term
 
 import (
-	"sync"
+	"fmt"
 
 	"golang.org/x/sys/windows"
 )
 
-type Terminal struct {
+type Platform struct {
 	stdin  windows.Handle
 	stdout windows.Handle
-
-	width  int
-	height int
-
-	backBuffer  []Cell
-	frontBuffer []Cell
-	buffer      []byte
-
-	mutex  *sync.Mutex
-	events []Event
-
-	lastCell Cell
-	lastX    int
-	lastY    int
 }
 
-func CreateTerminal() (*Terminal, error) {
+func (t *Terminal) platformSetup() error {
 	var err error
-	t := &Terminal{}
 
-	t.stdout, err = windows.GetStdHandle(uint32(windows.STD_OUTPUT_HANDLE))
+	t.platform.stdout, err = windows.GetStdHandle(uint32(windows.STD_OUTPUT_HANDLE))
 	if err != nil {
-		return t, err
+		return fmt.Errorf("Error getting stdout handle: %v\n", err)
 	}
 
-	t.stdin, err = windows.GetStdHandle(uint32(windows.STD_INPUT_HANDLE))
+	t.platform.stdin, err = windows.GetStdHandle(uint32(windows.STD_INPUT_HANDLE))
 	if err != nil {
-		return t, err
+		return fmt.Errorf("Error getting stdin handle: %v\n", err)
 	}
 
 	var mode uint32
-	err = windows.GetConsoleMode(t.stdout, &mode)
+	err = windows.GetConsoleMode(t.platform.stdout, &mode)
 	if err != nil {
-		return t, err
+		return fmt.Errorf("Error getting stdout console mode: %v\n", err)
 	}
 	mode |= windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
-	err = windows.SetConsoleMode(t.stdout, mode)
+	err = windows.SetConsoleMode(t.platform.stdout, mode)
 	if err != nil {
-		return t, err
+		return fmt.Errorf("Error setting stdout console mode: %v\n", err)
 	}
 
-	err = windows.SetConsoleMode(t.stdin, windows.ENABLE_VIRTUAL_TERMINAL_INPUT)
+	err = windows.SetConsoleMode(t.platform.stdin, windows.ENABLE_VIRTUAL_TERMINAL_INPUT)
 	if err != nil {
-		return t, err
-	}
-
-	if err != nil {
-		return t, err
+		return fmt.Errorf("Error setting stdin console mode: %v\n", err)
 	}
 
 	var info windows.ConsoleScreenBufferInfo
-	err = windows.GetConsoleScreenBufferInfo(t.stdout, &info)
+	err = windows.GetConsoleScreenBufferInfo(t.platform.stdout, &info)
 	if err != nil {
-		return t, err
+		return fmt.Errorf("Error getting console screen buffer info: %v\n", err)
 	}
 	t.width = int(info.Window.Right - info.Window.Left + 1)
 	t.height = int(info.Window.Bottom - info.Window.Top + 1)
 
-	t.frontBuffer = make([]Cell, 10000)
-	t.backBuffer = make([]Cell, 10000)
-	t.buffer = make([]byte, 10000)
-
-	t.mutex = &sync.Mutex{}
-	t.events = make([]Event, 0)
-
-	go t.readEvents()
-
-	return t, nil
+	return nil
 }
 
 func (t *Terminal) Close() error {
@@ -84,27 +56,18 @@ func (t *Terminal) Close() error {
 }
 
 func (t *Terminal) write(b []byte) error {
-	_, err := windows.Write(t.stdout, b)
+	_, err := windows.Write(t.platform.stdout, b)
 	return err
 }
 
 func (t *Terminal) readEvents() {
 	b := make([]byte, 32)
-	var read uint32
-	var err error
 
 	for true {
-		err = windows.ReadFile(t.stdin, b, &read, nil)
+		n, err := windows.Read(t.platform.stdin, b)
 		if err != nil {
 			continue
 		}
-
-		if read == 1 {
-			e := Event{b[0]}
-
-			t.mutex.Lock()
-			t.events = append(t.events, e)
-			t.mutex.Unlock()
-		}
+		t.parseInput(b, n)
 	}
 }

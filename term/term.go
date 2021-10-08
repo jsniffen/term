@@ -1,7 +1,9 @@
 package term
 
 import (
+	"fmt"
 	"strconv"
+	"sync"
 )
 
 type Key int
@@ -10,7 +12,51 @@ const (
 	CSI = "\x1b["
 )
 
-func (t *Terminal) setCell(x int, y int, c Cell) {
+type Terminal struct {
+	platform Platform
+
+	CursorX int
+	CursorY int
+
+	width  int
+	height int
+
+	backBuffer  []Cell
+	frontBuffer []Cell
+	buffer      []byte
+
+	mutex  *sync.Mutex
+	events []Event
+
+	lastCell Cell
+	lastX    int
+	lastY    int
+}
+
+func CreateTerminal() (*Terminal, error) {
+	var err error
+	t := &Terminal{}
+
+	err = t.platformSetup()
+	if err != nil {
+		return t, fmt.Errorf("Error performing platform setup: %v\n", err)
+	}
+
+	t.frontBuffer = make([]Cell, 10000)
+	t.backBuffer = make([]Cell, 10000)
+	t.buffer = make([]byte, 10000)
+
+	t.mutex = &sync.Mutex{}
+	t.events = make([]Event, 0)
+
+	t.CursorX, t.CursorY = 0, 0
+
+	go t.readEvents()
+
+	return t, nil
+}
+
+func (t *Terminal) SetCell(x int, y int, c Cell) {
 	if x < 0 || x >= t.width || y < 0 || y >= t.height {
 		return
 	}
@@ -22,16 +68,16 @@ func (t *Terminal) Clear(c Color) {
 	for y := 0; y < t.height; y++ {
 		for x := 0; x < t.width; x++ {
 			c := Cell{
-				fg: White,
-				bg: c,
-				r:  ' ',
+				FG: White,
+				BG: c,
+				R:  ' ',
 			}
-			t.setCell(x, y, c)
+			t.SetCell(x, y, c)
 		}
 	}
 }
 
-func (t *Terminal) setForegroundColor(c Color) {
+func (t *Terminal) SetForegroundColor(c Color) {
 	t.appendLiteral(CSI + "38;2;")
 	t.appendNumber(int(c.r))
 	t.appendLiteral(";")
@@ -41,7 +87,7 @@ func (t *Terminal) setForegroundColor(c Color) {
 	t.appendLiteral("m")
 }
 
-func (t *Terminal) setBackgroundColor(c Color) {
+func (t *Terminal) SetBackgroundColor(c Color) {
 	t.appendLiteral(CSI + "48;2;")
 	t.appendNumber(int(c.r))
 	t.appendLiteral(";")
@@ -51,12 +97,24 @@ func (t *Terminal) setBackgroundColor(c Color) {
 	t.appendLiteral("m")
 }
 
-func (t *Terminal) setCursor(x int, y int) {
+func (t *Terminal) SetCursorPosition(x int, y int) {
 	t.appendLiteral(CSI)
 	t.appendNumber(y + 1)
 	t.appendLiteral(";")
 	t.appendNumber(x + 1)
 	t.appendLiteral("H")
+}
+
+func (t *Terminal) HideCursor() {
+	t.appendLiteral(CSI + "?")
+	t.appendNumber(25)
+	t.appendLiteral("l")
+}
+
+func (t *Terminal) ShowCursor() {
+	t.appendLiteral(CSI + "?")
+	t.appendNumber(25)
+	t.appendLiteral("h")
 }
 
 func (t *Terminal) appendLiteral(s string) {
@@ -73,18 +131,18 @@ func (t *Terminal) appendNumber(n int) {
 
 func (t *Terminal) sendCode(x int, y int, c Cell) {
 	if (t.lastX == 0 && t.lastY == 0) || x-1 != t.lastX || y != t.lastY {
-		t.setCursor(x, y)
+		t.SetCursorPosition(x, y)
 	}
 
-	if t.lastCell.bg != c.bg {
-		t.setBackgroundColor(c.bg)
+	if t.lastCell.BG != c.BG {
+		t.SetBackgroundColor(c.BG)
 	}
 
-	if t.lastCell.fg != c.fg {
-		t.setForegroundColor(c.fg)
+	if t.lastCell.FG != c.FG {
+		t.SetForegroundColor(c.FG)
 	}
 
-	t.buffer = append(t.buffer, c.r)
+	t.buffer = append(t.buffer, c.R)
 
 	t.lastX = x
 	t.lastY = y
@@ -92,6 +150,7 @@ func (t *Terminal) sendCode(x int, y int, c Cell) {
 }
 
 func (t *Terminal) Render() error {
+	t.HideCursor()
 	for y := 0; y < t.height; y++ {
 		for x := 0; x < t.width; x++ {
 			i := y*t.width + x
@@ -102,6 +161,8 @@ func (t *Terminal) Render() error {
 			}
 		}
 	}
+	t.SetCursorPosition(t.CursorX, t.CursorY)
+	t.ShowCursor()
 	err := t.write(t.buffer)
 	t.buffer = t.buffer[:0]
 	return err
@@ -149,7 +210,7 @@ func (t *Terminal) Modal(x_0, y_0, w, h int) {
 	c := Cell{Blue, White, 'X'}
 	for y := y_0; y < y_0+h; y++ {
 		for x := x_0; x < x_0+w; x++ {
-			t.setCell(x, y, c)
+			t.SetCell(x, y, c)
 		}
 	}
 }

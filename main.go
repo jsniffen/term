@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
-	"time"
 
+	"finn/gui"
 	"finn/term"
 )
 
@@ -18,7 +18,14 @@ func main() {
 	}
 	defer t.Close()
 
-	x, y := 1, 1
+	g, err := gui.CreateGui(t)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	t.Clear(term.Red)
+	t.Render()
+
 	var e term.Event
 	for Running {
 		for t.PollEvents(&e) {
@@ -26,20 +33,20 @@ func main() {
 			case term.Keyq:
 				Running = false
 			case term.Keyh:
-				x--
+				t.CursorX--
 			case term.Keyj:
-				y++
+				t.CursorY++
 			case term.Keyk:
-				y--
+				t.CursorY--
 			case term.Keyl:
-				x++
+				t.CursorX++
 			}
 
-		}
-		t.Clear(term.Red)
-		t.Modal(x, y, 10, 10)
-		t.Render()
+			t.Clear(term.Red)
 
-		time.Sleep(33 * time.Millisecond)
+			g.Button(&e)
+
+			t.Render()
+		}
 	}
 }
