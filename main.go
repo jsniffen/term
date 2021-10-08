@@ -36,7 +36,7 @@ func main() {
 			}
 
 		}
-		t.Clear()
+		t.Clear(term.Red)
 		t.Modal(x, y, 10, 10)
 		t.Render()
 

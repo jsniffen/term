@@ -1,6 +1,8 @@
 package term
 
-import "fmt"
+import (
+	"strconv"
+)
 
 type Key int
 
@@ -12,15 +14,16 @@ func (t *Terminal) setCell(x int, y int, c Cell) {
 	if x < 0 || x >= t.width || y < 0 || y >= t.height {
 		return
 	}
+
 	t.backBuffer[y*t.width+x] = c
 }
 
-func (t *Terminal) Clear() {
+func (t *Terminal) Clear(c Color) {
 	for y := 0; y < t.height; y++ {
 		for x := 0; x < t.width; x++ {
 			c := Cell{
 				fg: White,
-				bg: Black,
+				bg: c,
 				r:  ' ',
 			}
 			t.setCell(x, y, c)
@@ -28,27 +31,57 @@ func (t *Terminal) Clear() {
 	}
 }
 
-func (t *Terminal) setCursor(x int, y int) error {
-	buf := fmt.Sprintf("%s%d:%dH", CSI, y+1, x+1)
-	return t.write([]byte(buf))
+func (t *Terminal) setForegroundColor(c Color) {
+	t.appendLiteral(CSI + "38;2;")
+	t.appendNumber(int(c.r))
+	t.appendLiteral(";")
+	t.appendNumber(int(c.g))
+	t.appendLiteral(";")
+	t.appendNumber(int(c.b))
+	t.appendLiteral("m")
+}
+
+func (t *Terminal) setBackgroundColor(c Color) {
+	t.appendLiteral(CSI + "48;2;")
+	t.appendNumber(int(c.r))
+	t.appendLiteral(";")
+	t.appendNumber(int(c.g))
+	t.appendLiteral(";")
+	t.appendNumber(int(c.b))
+	t.appendLiteral("m")
+}
+
+func (t *Terminal) setCursor(x int, y int) {
+	t.appendLiteral(CSI)
+	t.appendNumber(y + 1)
+	t.appendLiteral(";")
+	t.appendNumber(x + 1)
+	t.appendLiteral("H")
+}
+
+func (t *Terminal) appendLiteral(s string) {
+	for _, c := range s {
+		b := byte(c)
+		t.buffer = append(t.buffer, b)
+	}
+}
+
+func (t *Terminal) appendNumber(n int) {
+	s := strconv.Itoa(n)
+	t.appendLiteral(s)
 }
 
 func (t *Terminal) sendCode(x int, y int, c Cell) {
-	var buf []byte
-
 	if (t.lastX == 0 && t.lastY == 0) || x-1 != t.lastX || y != t.lastY {
-		buf = []byte(fmt.Sprintf("%s%d;%dH", CSI, y+1, x+1))
-		t.buffer = append(t.buffer, buf...)
+		t.setCursor(x, y)
 	}
 
 	if t.lastCell.bg != c.bg {
-		buf = []byte(fmt.Sprintf("%s48;2;%d;%d;%dm", CSI, c.bg.r, c.bg.g, c.bg.b))
-		t.buffer = append(t.buffer, buf...)
+		t.setBackgroundColor(c.bg)
 	}
 
 	if t.lastCell.fg != c.fg {
-		buf = []byte(fmt.Sprintf("%s38;2;%d;%d;%dm", CSI, c.fg.r, c.fg.g, c.fg.b))
-		t.buffer = append(t.buffer, buf...)
+		t.setForegroundColor(c.fg)
 	}
 
 	t.buffer = append(t.buffer, c.r)

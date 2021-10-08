@@ -59,9 +59,9 @@ func CreateTerminal() (*Terminal, error) {
 		return t, err
 	}
 
-	t.frontBuffer = make([]Cell, 4096)
-	t.backBuffer = make([]Cell, 4096)
-	t.buffer = make([]byte, 4096)
+	t.frontBuffer = make([]Cell, t.width*t.height)
+	t.backBuffer = make([]Cell, t.width*t.height)
+	t.buffer = make([]byte, 1024)
 
 	t.mutex = &sync.Mutex{}
 	t.events = make([]Event, 0)
