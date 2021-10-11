@@ -36,11 +36,14 @@ bool render_terminal(struct terminal *t)
 
 #elif _WIN32
 
+
 #include <stdio.h>
 
 #include <windows.h>
 
 #endif
+
+#include "slice.h"
 
 #define CSI "\x1b["
 
@@ -63,45 +66,6 @@ int parse_number(int num, char *buf)
 	return l;
 }
 
-struct slice {
-	uint8_t *buf;
-	int cap;
-	int len;
-};
-
-void slice_init(struct slice *s, int cap)
-{
-	s->len = 0;
-	s->cap = cap;
-	s->buf = (void *)malloc(cap);
-}
-
-void slice_free(struct slice *s)
-{
-	s->len = 0;
-	s->cap = 0;
-	free(s->buf);
-}
-
-void slice_append(struct slice *s, void *data, int size)
-{
-	int cap = s->cap;
-
-	while (cap - s->len < size) {
-		cap *= 2;
-	}
-
-	if (cap > s->cap) {
-		uint8_t *buf = malloc(cap);
-		memcpy(buf, s->buf, s->len);
-		free(s->buf);
-		s->buf = buf;
-		s->cap = cap;
-	}
-
-	memcpy(s->buf + s->len, data, size);
-	s->len += size;
-}
 
 enum Key {
 	KeyBackSpace = 8, KeyTab,
@@ -181,144 +145,12 @@ bool close_terminal(struct terminal *t);
 bool write_terminal(struct terminal *t, char *buffer, int len);
 void parse_terminal_input(struct terminal *t, char *buffer, int len);
 
-#ifdef _WIN32
-HANDLE mutex;
-
-DWORD handle_stdin(struct terminal *t)
-{
-	DWORD read;
-	char buffer[32];
-
-	HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
-
-	while (true) {
-		ReadFile(in, buffer, 32, &read, 0);
-		parse_terminal_input(t, buffer, read);
-	}
-
-	return 0;
-}
-
-bool write_terminal(struct terminal *t, char *buffer, int len)
-{
-	DWORD w;
-	return WriteFile(t->console_stdout, buffer, len, &w, 0);
-}
-
-bool create_terminal(struct terminal *t)
-{
-	mutex = CreateMutex(0, 0, 0);
-
-	t->console_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
-	t->console_stdin = GetStdHandle(STD_INPUT_HANDLE);
-
-	DWORD console_mode;
-	GetConsoleMode(t->console_stdout, &console_mode);
-	console_mode = console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	SetConsoleMode(t->console_stdout, console_mode);
-
-	SetConsoleMode(t->console_stdin, ENABLE_VIRTUAL_TERMINAL_INPUT);
-
-	CONSOLE_SCREEN_BUFFER_INFO info;
-	GetConsoleScreenBufferInfo(t->console_stdout, &info);
-
-	t->width = info.srWindow.Right - info.srWindow.Left + 1;
-	t->height = info.srWindow.Bottom - info.srWindow.Top + 1;
-
-	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	memset(t->front_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
-
-	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	memset(t->back_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
-
-	t->code_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
-	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
-
-	t->code_buffer_index = 0;
-
-	t->buffer = (struct slice *)malloc(sizeof(struct slice));
-	slice_init(t->buffer, 256);
-
-	DWORD thread_id;
-	CreateThread(0, 0, handle_stdin, t, 0, &thread_id);
-
-	return true;
-}
+#ifdef __linux__
+#include "term_linux.h"
 #endif
 
-#ifdef __linux__
-
-// linux
-void *handle_stdin(void *ptr)
-{
-	struct terminal *t = (struct terminal *)ptr;
-	char buffer[32];
-
-	while (true) {
-		int r = read(0, buffer, 32);
-		parse_terminal_input(t, buffer, r);
-	}
-
-	return 0;
-}
-
-bool write_terminal(struct terminal *t, char *buffer, int len)
-{
-	return write(t->fd, buffer, len) != -1;
-}
-
-// linux
-bool create_terminal(struct terminal *t)
-{
-	t->fd = open("/dev/tty", O_RDWR);
-	if (t->fd < 0) return false;
-
-	struct winsize ws = {};
-	if (ioctl(t->fd, TIOCGWINSZ, &ws) < 0) return false;
-
-	t->width = ws.ws_col;
-	t->height = ws.ws_row;
-
-	struct termios tios = {};
-	tcgetattr(t->fd, &t->original_termios);
-	memcpy(&tios, &t->original_termios, sizeof(struct termios));
-
-	tios.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
-	tios.c_oflag &= ~OPOST;
-	tios.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-	tios.c_cflag &= ~(CSIZE | PARENB);
-	tios.c_cflag |= CS8;
-	tios.c_cc[VMIN] = 1;
-	tios.c_cc[VTIME] = 0;
-	tcsetattr(t->fd, TCSAFLUSH, &tios);
-
-	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	memset(t->front_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
-
-	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	memset(t->back_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
-
-	t->code_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
-	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
-	t->code_buffer_index = 0;
-
-	t->buffer = (struct slice *)malloc(sizeof(struct slice));
-	slice_init(t->buffer, 256);
-
-	pthread_t pt;
-
-	pthread_create(&pt, 0, handle_stdin, (void *)&t);
-
-	t->cursor_x = 0;
-	t->cursor_y = 0;
-
-	return true;
-}
-
-bool close_terminal(struct terminal *t)
-{
-	return tcsetattr(t->fd, TCSAFLUSH, &t->original_termios) == 0;
-}
+#ifdef _WIN32
+#inlcude "term_windows.h"
 #endif
 
 static int last_x, last_y;
@@ -327,15 +159,10 @@ static struct cell last_cell;
 void append_bytes(struct terminal *t, uint8_t *b, int l)
 {
 	slice_append(t->buffer, b, l);
-	//TODO(Julian): Check memcpy out of bounds.
-	// uint8_t *cb = &t->code_buffer[t->code_buffer_index];
-	// memcpy(cb, b, l);
-	// t->code_buffer_index += l;
 }
 
 #define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
 #define append_number(terminal, number, buffer) append_bytes(terminal, buffer, parse_number(number, buffer))
-
 void append_code(struct terminal *t, char *code)
 {
 	int len = strlen(code);
@@ -355,23 +182,19 @@ void send_code(struct terminal *t, int x, int y, struct cell *c)
 	if ((last_x == 0 && last_y == 0) || x - 1 != last_x || y != last_y) {
 		int l = sprintf(b, CSI "%d;%dH", y+1, x+1);
 		append_bytes(t, b, l);
-		// append_code(t, b);
 	}
 
 	if (memcmp(&last_cell.bg, &c->bg, sizeof(struct color)) != 0) {
 		int l = sprintf(b, CSI "48;2;%d;%d;%dm", c->bg.r, c->bg.g, c->bg.b); 
 		append_bytes(t, b, l);
-		// append_code(t, b);
 	}
 
 	if (memcmp(&last_cell.fg, &c->fg, sizeof(struct color)) != 0) {
 		int l = sprintf(b, CSI "38;2;%d;%d;%dm", c->fg.r, c->fg.g, c->fg.b);
 		append_bytes(t, b, l);
-		// append_code(t, b);
 	}
 
 	append_bytes(t, &c->c, 1);
-	// t->code_buffer[t->code_buffer_index++] = c->c;
 
 	last_x = x;
 	last_y = y;
@@ -407,8 +230,6 @@ void set_cursor_terminal(struct terminal *t, int x, int y)
 	append_literal(t, ";");
 	append_number(t, ++x, buf);
 	append_literal(t, "H");
-	// sprintf(b, CSI "%d;%dH", y, x);
-	// return write_terminal(t, b, strlen(b));
 }
 
 void hide_cursor_terminal(struct terminal *t)
@@ -417,8 +238,6 @@ void hide_cursor_terminal(struct terminal *t)
 	append_literal(t, CSI "?");
 	append_number(t, 25, buf);
 	append_literal(t, "l");
-	// append_code(t, CSI "?25l");
-	//return write_terminal(t, CSI "?25l", 6);
 }
 
 void show_cursor_terminal(struct terminal *t)
@@ -427,7 +246,6 @@ void show_cursor_terminal(struct terminal *t)
 	append_literal(t, CSI "?");
 	append_number(t, 25, buf);
 	append_literal(t, "h");
-	//return write_terminal(t, CSI "?25h", 6);
 }
 
 bool render_terminal(struct terminal *t)
@@ -462,17 +280,12 @@ bool reset_terminal(struct terminal *t)
 }
 
 
+//TODO(Julian): Thread synchronization...
 bool poll_event_terminal(struct terminal *t, union event *e)
 {
 	if (event_count <= 0) return false;
 
-	// int count = (int)InterlockedDecrement((LONG *)&event_count);
-	// *e = event_queue[count];
-
-	// WaitForSingleObject(mutex, INFINITE);
 	*e = event_queue[--event_count];
-	// ReleaseMutex(mutex);
-
 	return true;
 }
 

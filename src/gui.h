@@ -1,98 +1,29 @@
-struct v2 {
-	int x;
-	int y;
-};
+static int x0 = 0;
+static int y0 = 0;
+static int x1 = 10;
+static int y1 = 2;
 
-struct v3 {
-	int x;
-	int y;
-	int z;
-};
-
-struct buffer {
-	uint8_t *bytes;
-	uint32_t length;
-
-	struct v2 position;
-	struct v2 size;
-};
-
-bool create_buffer(struct buffer *b, char *fn, int x, int y, int w, int h)
-{
-	FILE *f = fopen(fn, "rw");
-	fseek(f, 0, SEEK_END);
-	b->length = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	b->bytes = (uint8_t *)malloc(b->length);
-	fread(b->bytes, 1, b->length, f);
-
-	struct v2 position = {
-		.x = x,
-		.y = y,
-	};
-
-	struct v2 size = {
-		.x = w,
-		.y = h,
-	};
-
-	b->position = position;
-	b->size = size;
-}
-
-void update_buffer(struct terminal *t, struct buffer *b, union event e)
-{
-	if (t->cursor_x < b->position.x || t->cursor_x >= b->position.x + b->size.x) {
-		return;
-	}
-
-	if (t->cursor_y < b->position.y || t->cursor_y >= b->position.y + b->size.y) {
-		return;
-	}
-
-	b->bytes[0] = 'X';
-	return;
-}
-
-void render_buffer(struct terminal *t, struct buffer *b) 
-{
-	int x_0 = b->position.x;
-	int y_0 = b->position.y;
-	int width = b->size.x;
-	int height = b->size.y;
+bool button(struct terminal *t) {
+	int w = x1 - x0;
+	int h = y1 - y0;
 
 	struct cell c = {
-		.bg = {0, 0, 0},
-		.fg = {255, 255, 255},
+		.bg = {255, 255, 255},
+		.fg = {0, 0, 0},
 		.c = ' ',
 	};
 
-	int x = x_0;
-	int y = y_0;
-
-	for (int i = 0; i < b->length; ++i) {
-		uint8_t byte = b->bytes[i];
-
-		if (byte == '\n') {
-			++y;
-			x = x_0;
-			continue;
-		}
-
-		if (byte == '\t') {
-			x += 4;
-			continue;
-		}
-
-		if (byte == ' ') {
-			++x;
-			continue;
-		}
-
-		if (x < 0 || x >= x_0 + width || y < 0 || y >= y_0 + height) continue;
-
-		c.c = byte;
-		set_cell(t, x, y, &c);
-		++x;
+	if (t->cursor_x < x1 && t->cursor_x >= x0 && t->cursor_y < y1 && t->cursor_y >= y0) {
+		c.bg.b=0;
+		c.bg.r=0;
 	}
+
+
+	for (int y = y0; y < y0 + h; ++y) {
+		for (int x = x0; x < x0 + w; ++x) {
+			set_cell(t, x, y, &c);
+		}
+	}
+
+	return true;
 }
