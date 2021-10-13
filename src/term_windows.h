@@ -1,5 +1,23 @@
 HANDLE mutex;
 
+bool update_window_size(struct terminal *t) {
+	CONSOLE_SCREEN_BUFFER_INFO info;
+	if (!GetConsoleScreenBufferInfo(t->console_stdout, &info)) return false;
+
+	t->width = info.srWindow.Right - info.srWindow.Left + 1;
+	t->height = info.srWindow.Bottom - info.srWindow.Top + 1;
+
+	if (t->front_buffer) free(t->front_buffer);
+	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*t->width*t->height);
+	memset(t->front_buffer, 0, sizeof(struct cell)*t->width*t->height);
+
+	if (t->back_buffer) free(t->back_buffer);
+	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*t->width*t->height);
+	memset(t->back_buffer, 0, sizeof(struct cell)*t->width*t->height);
+
+	return true;
+}
+
 DWORD handle_stdin(struct terminal *t)
 {
 	DWORD read;
@@ -13,6 +31,50 @@ DWORD handle_stdin(struct terminal *t)
 	}
 
 	return 0;
+}
+
+bool parse_key_event(KEY_EVENT_RECORD r, union event *e)
+{
+	if (!r.bKeyDown) return false;
+
+	switch (r.wVirtualKeyCode) {
+		case 0x51:
+			e->keyboard.key = Keyq;
+			break;
+		default:
+			break;
+	}
+
+	e->keyboard.alt = (r.dwControlKeyState & LEFT_ALT_PRESSED) ||
+			  (r.dwControlKeyState & RIGHT_ALT_PRESSED);
+	return true;
+}
+
+bool read_terminal(struct terminal *t, union event *e)
+{
+	HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+	INPUT_RECORD input[1];
+	DWORD length = 1;
+	DWORD read;
+	if (!ReadConsoleInput(in, input, length, &read)) {
+		//TODO(Julian): Handle error.
+		return false;
+	}
+
+	if (length) {
+		switch(input[0].EventType) {
+			case KEY_EVENT:
+				e->type = KeyboardEvent;
+				return parse_key_event(input[0].Event.KeyEvent, e);
+			case WINDOW_BUFFER_SIZE_EVENT:
+				e->type = WindowEvent;
+				return update_window_size(t);
+			default:
+				break;
+		}
+	}
+
+	return true;
 }
 
 bool write_terminal(struct terminal *t, char *buffer, int len)
@@ -33,30 +95,20 @@ bool create_terminal(struct terminal *t)
 	console_mode = console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 	SetConsoleMode(t->console_stdout, console_mode);
 
-	SetConsoleMode(t->console_stdin, ENABLE_VIRTUAL_TERMINAL_INPUT);
+	SetConsoleMode(t->console_stdin, ENABLE_WINDOW_INPUT);
 
-	CONSOLE_SCREEN_BUFFER_INFO info;
-	GetConsoleScreenBufferInfo(t->console_stdout, &info);
+	t->front_buffer = 0;
+	t->back_buffer = 0;
+	update_window_size(t);
 
-	t->width = info.srWindow.Right - info.srWindow.Left + 1;
-	t->height = info.srWindow.Bottom - info.srWindow.Top + 1;
-
-	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	memset(t->front_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
-
-	t->back_buffer = (struct cell *)malloc(sizeof(struct cell)*32*t->width*t->height);
-	memset(t->back_buffer, 0, sizeof(struct cell)*32*t->width*t->height);
-
-	t->code_buffer = (uint8_t *)malloc(sizeof(uint8_t)*32*t->width*t->height);
-	memset(t->code_buffer, 0, sizeof(uint8_t)*32*t->width*t->height);
-
-	t->code_buffer_index = 0;
+#if 0
+#endif
 
 	t->buffer = (struct slice *)malloc(sizeof(struct slice));
 	slice_init(t->buffer, 256);
 
-	DWORD thread_id;
-	CreateThread(0, 0, handle_stdin, t, 0, &thread_id);
+	// DWORD thread_id;
+	// CreateThread(0, 0, handle_stdin, t, 0, &thread_id);
 
 	return true;
 }

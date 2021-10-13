@@ -95,10 +95,17 @@ struct keyboard_event {
 	bool alt;
 };
 
+struct window_event {
+	uint32_t type;
+	uint32_t width;
+	uint32_t height;
+};
+
 union event {
 	uint32_t type;
 
 	struct keyboard_event keyboard;
+	struct window_event window;
 };
 
 struct color {
@@ -150,19 +157,19 @@ void parse_terminal_input(struct terminal *t, char *buffer, int len);
 #endif
 
 #ifdef _WIN32
-#inlcude "term_windows.h"
+#include "term_windows.h"
 #endif
 
 static int last_x, last_y;
 static struct cell last_cell;
 
+#define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
+#define append_number(terminal, number, buffer) append_bytes(terminal, buffer, parse_number(number, buffer))
 void append_bytes(struct terminal *t, uint8_t *b, int l)
 {
 	slice_append(t->buffer, b, l);
 }
 
-#define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
-#define append_number(terminal, number, buffer) append_bytes(terminal, buffer, parse_number(number, buffer))
 void append_code(struct terminal *t, char *code)
 {
 	int len = strlen(code);
@@ -203,6 +210,8 @@ void send_code(struct terminal *t, int x, int y, struct cell *c)
 
 bool set_cell(struct terminal *t, int x, int y, struct cell *c)
 {
+	if (x < 0 || x >= t->width || y < 0 || y >= t->height) return false;
+
 	memcpy(&t->back_buffer[t->width*y + x], c, sizeof(struct cell));
 	return true;
 }
