@@ -8,6 +8,8 @@ bool update_window_size(struct terminal *t)
 	t->width = ws.ws_col;
 	t->height = ws.ws_row;
 
+	logf("WINDOW: %d, %d\n", t->width, t->height);
+
 	if (t->front_buffer) free(t->front_buffer);
 	t->front_buffer = (struct cell *)malloc(sizeof(struct cell)*t->width*t->height);
 	memset(t->front_buffer, 0, sizeof(struct cell)*t->width*t->height);

@@ -3,7 +3,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
+#include "log.h"
 #include "term.h"
 #include "gui.h"
 
@@ -67,7 +69,6 @@ int main(void)
 			render_terminal(&t);
 		}
 	}
-
 	reset_terminal(&t);
 	close_terminal(&t);
 	return 0;
