@@ -34,7 +34,9 @@ int main(void)
 	int y, x = 0;
 	union event e;
 	while (running) {
-		while (poll_event_terminal(&t, &e)) {
+		if (terminal_read_event(&t, &e)) {
+			clear_terminal(&t);
+
 			if (e.type == KeyboardEvent) {
 				if (e.keyboard.alt && (e.keyboard.key == Keyq || e.keyboard.key == KeyQ)) {
 					running = false;
@@ -59,17 +61,11 @@ int main(void)
 					hide_cursor_terminal(&t);
 				}
 			}
+
+			button(&t);
+
+			render_terminal(&t);
 		}
-
-		clear_terminal(&t);
-
-
-		button(&t);
-
-		// modal(&t, 10, 10, 10, 10);
-
-		render_terminal(&t);
-		usleep(16000);
 	}
 
 	reset_terminal(&t);
