@@ -149,7 +149,7 @@ struct terminal {
 
 bool create_terminal(struct terminal *t);
 bool close_terminal(struct terminal *t);
-bool write_terminal(struct terminal *t, char *buffer, int len);
+bool write_terminal(struct terminal *t, uint8_t *buffer, int len);
 void parse_terminal_input(struct terminal *t, char *buffer, int len);
 
 #ifdef __linux__

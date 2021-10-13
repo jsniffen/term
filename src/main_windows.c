@@ -34,21 +34,33 @@ int main(void)
 	union event e;
 	while (running) {
 		if (read_terminal(&t, &e)) {
-			if (e.type == WindowEvent) {
+			clear_terminal(&t);
+
+			if (e.keyboard.alt && (e.keyboard.key == Keyq || e.keyboard.key == KeyQ)) {
+				running = false;
+			}
+			if (e.keyboard.key == Keyh) {
 				--x;
 			}
-
-			if (e.type == KeyboardEvent) {
-				if (e.keyboard.alt) running = false;
+			if (e.keyboard.key == Keyj) {
+				++y;
 			}
-			clear_terminal(&t);
+			if (e.keyboard.key == Keyk) {
+				--y;
+			}
+			if (e.keyboard.key == Keyl) {
+				++x;
+			}
+			if (e.keyboard.key == Keys) {
+				show_cursor_terminal(&t);
+			}
+			if (e.keyboard.key == Keye) {
+				hide_cursor_terminal(&t);
+			}
 
 			modal(&t, x, y, 10, 10);
 
-
 			render_terminal(&t);
-			++x;
-			++y;
 		}
 	}
 	return 0;

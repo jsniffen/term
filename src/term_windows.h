@@ -1,5 +1,5 @@
-HANDLE mutex;
-
+// Update the window size of the terminal struct.
+// Also update the memory allocated for the front and back buffers.
 bool update_window_size(struct terminal *t) {
 	CONSOLE_SCREEN_BUFFER_INFO info;
 	if (!GetConsoleScreenBufferInfo(t->console_stdout, &info)) return false;
@@ -18,38 +18,19 @@ bool update_window_size(struct terminal *t) {
 	return true;
 }
 
-DWORD handle_stdin(struct terminal *t)
-{
-	DWORD read;
-	char buffer[32];
-
-	HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
-
-	while (true) {
-		ReadFile(in, buffer, 32, &read, 0);
-		parse_terminal_input(t, buffer, read);
-	}
-
-	return 0;
-}
-
+// Parse a KEY_EVENT_RECORD and convert it into a canonical event.
 bool parse_key_event(KEY_EVENT_RECORD r, union event *e)
 {
 	if (!r.bKeyDown) return false;
 
-	switch (r.wVirtualKeyCode) {
-		case 0x51:
-			e->keyboard.key = Keyq;
-			break;
-		default:
-			break;
-	}
+	e->keyboard.key = (enum Key)r.uChar.AsciiChar;
 
 	e->keyboard.alt = (r.dwControlKeyState & LEFT_ALT_PRESSED) ||
 			  (r.dwControlKeyState & RIGHT_ALT_PRESSED);
 	return true;
 }
 
+// Read an event from the terminal.
 bool read_terminal(struct terminal *t, union event *e)
 {
 	HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
@@ -77,16 +58,16 @@ bool read_terminal(struct terminal *t, union event *e)
 	return true;
 }
 
-bool write_terminal(struct terminal *t, char *buffer, int len)
+// Write a buffer of bytes to the terminal.
+bool write_terminal(struct terminal *t, uint8_t *buffer, int len)
 {
 	DWORD w;
 	return WriteFile(t->console_stdout, buffer, len, &w, 0);
 }
 
+// Create a terminal.
 bool create_terminal(struct terminal *t)
 {
-	mutex = CreateMutex(0, 0, 0);
-
 	t->console_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 	t->console_stdin = GetStdHandle(STD_INPUT_HANDLE);
 
@@ -101,14 +82,8 @@ bool create_terminal(struct terminal *t)
 	t->back_buffer = 0;
 	update_window_size(t);
 
-#if 0
-#endif
-
 	t->buffer = (struct slice *)malloc(sizeof(struct slice));
 	slice_init(t->buffer, 256);
-
-	// DWORD thread_id;
-	// CreateThread(0, 0, handle_stdin, t, 0, &thread_id);
 
 	return true;
 }

@@ -11,7 +11,7 @@ void *handle_stdin(void *ptr)
 	return 0;
 }
 
-bool write_terminal(struct terminal *t, char *buffer, int len)
+bool write_terminal(struct terminal *t, uint8_t *buffer, int len)
 {
 	return write(t->fd, buffer, len) != -1;
 }
