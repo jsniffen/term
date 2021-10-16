@@ -162,12 +162,23 @@ void parse_terminal_input(struct terminal *t, char *buffer, int len);
 
 static int last_x, last_y;
 static struct cell last_cell;
+static bool initialized = false;
 
 #define append_literal(terminal, string) append_bytes(terminal, string, sizeof(string)-1)
 #define append_number(terminal, number, buffer) append_bytes(terminal, buffer, parse_number(number, buffer))
 void append_bytes(struct terminal *t, uint8_t *b, int l)
 {
 	slice_append(t->buffer, b, l);
+}
+
+void append_utf8(struct terminal *t, uint32_t rune)
+{
+	uint8_t buf[4];
+	buf[0] = (rune & 0xFF000000) >> 24;
+	buf[1] = (rune & 0x00FF0000) >> 16;
+	buf[2] = (rune & 0x0000FF00) >> 8;
+	buf[3] = (rune & 0x000000FF) >> 0;
+	append_bytes(t, buf, 4);
 }
 
 void append_code(struct terminal *t, char *code)
@@ -191,18 +202,19 @@ void send_code(struct terminal *t, int x, int y, struct cell *c)
 		append_bytes(t, b, l);
 	}
 
-	if (memcmp(&last_cell.bg, &c->bg, sizeof(struct color)) != 0) {
+	if (memcmp(&last_cell.bg, &c->bg, sizeof(struct color)) != 0 || !initialized) {
 		int l = sprintf(b, CSI "48;2;%d;%d;%dm", c->bg.r, c->bg.g, c->bg.b); 
 		append_bytes(t, b, l);
 	}
 
-	if (memcmp(&last_cell.fg, &c->fg, sizeof(struct color)) != 0) {
+	if (memcmp(&last_cell.fg, &c->fg, sizeof(struct color)) != 0 || !initialized) {
 		int l = sprintf(b, CSI "38;2;%d;%d;%dm", c->fg.r, c->fg.g, c->fg.b);
 		append_bytes(t, b, l);
 	}
 
-	append_bytes(t, (uint8_t *)&c->c, 2);
+	append_utf8(t, c->c);
 
+	initialized = true;
 	last_x = x;
 	last_y = y;
 	memcpy(&last_cell, c, sizeof(struct cell));
