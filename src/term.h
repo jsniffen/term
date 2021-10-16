@@ -117,7 +117,7 @@ struct color {
 struct cell {
 	struct color fg;
 	struct color bg;
-	char c;
+	uint32_t c;
 };
 
 static int event_count;
@@ -201,7 +201,7 @@ void send_code(struct terminal *t, int x, int y, struct cell *c)
 		append_bytes(t, b, l);
 	}
 
-	append_bytes(t, &c->c, 1);
+	append_bytes(t, (uint8_t *)&c->c, 2);
 
 	last_x = x;
 	last_y = y;

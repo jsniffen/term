@@ -1,5 +1,3 @@
-#include <stdarg.h>
-
 static FILE *log_file;
 static char log_buffer[1024];
 

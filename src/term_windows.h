@@ -68,6 +68,8 @@ bool write_terminal(struct terminal *t, uint8_t *buffer, int len)
 // Create a terminal.
 bool create_terminal(struct terminal *t)
 {
+	// SetConsoleOutputCP(65001);
+
 	t->console_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 	t->console_stdin = GetStdHandle(STD_INPUT_HANDLE);
 
